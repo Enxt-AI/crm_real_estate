@@ -58,7 +58,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const logout = async () => {
     try {
       await auth.signout();
-    } finally {
+      
       // Clear Service Worker caches to prevent stale session restores
       if (typeof window !== "undefined" && "caches" in window) {
         try {
@@ -76,6 +76,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       });
       // Force a full reload to ensure session is cleared
       window.location.href = "/login";
+    } catch (error: any) {
+      console.error("Logout failed:", error);
+      // We do not reload or clear state if the backend request failed,
+      // otherwise the browser retains the cookie and causes an infinite login loop.
+      import("sonner").then((mod) => mod.toast.error("Failed to log out: " + (error.message || "Network error")));
     }
   };
 
