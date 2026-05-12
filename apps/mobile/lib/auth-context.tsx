@@ -59,6 +59,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       await auth.signout();
     } finally {
+      // Clear Service Worker caches to prevent stale session restores
+      if (typeof window !== "undefined" && "caches" in window) {
+        try {
+          const cacheKeys = await caches.keys();
+          await Promise.all(cacheKeys.map(key => caches.delete(key)));
+        } catch (e) {
+          console.error("Failed to clear caches:", e);
+        }
+      }
+      
       setState({
         user: null,
         isLoading: false,
