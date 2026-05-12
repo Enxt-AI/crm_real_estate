@@ -191,10 +191,13 @@ router.post("/signin", signinLimiter, async (req: Request, res: Response) => {
 router.post("/signout", authenticate, (req: Request, res: Response) => {
   const origin = req.headers.origin;
   const cookieName = getCookieName(origin);
-  res.clearCookie(cookieName, { path: "/" });
-  res.clearCookie("token", { path: "/" });
-  res.clearCookie("token_web", { path: "/" });
-  res.clearCookie("token_mobile", { path: "/" });
+  const options = cookieOptions(origin);
+  
+  // Browsers require exact matching options (domain, path, secure, samesite) to clear a cookie
+  res.clearCookie(cookieName, options);
+  res.clearCookie("token", options);
+  res.clearCookie("token_web", options);
+  res.clearCookie("token_mobile", options);
   res.json({ message: "Signed out successfully" });
 });
 
