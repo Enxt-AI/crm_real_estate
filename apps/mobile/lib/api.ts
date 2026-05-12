@@ -256,6 +256,7 @@ export type Lead = {
   isArchived: boolean;
   archivedAt: string | null;
   archivedReason: string | null;
+  interactions?: Interaction[];
   _count?: {
     interactions: number;
     propertyInterests: number;
