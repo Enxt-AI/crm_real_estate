@@ -527,7 +527,7 @@ export const auth = {
   signout: () =>
     request<{ message: string }>("/auth/signout", { method: "POST" }),
 
-  me: () => request<{ user: User }>("/auth/me"),
+  me: () => request<{ user: User }>(`/auth/me?t=${Date.now()}`),
 
   changePassword: (data: { currentPassword: string; newPassword: string }) =>
     request<{ message: string }>("/auth/change-password", {
