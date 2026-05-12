@@ -14,4 +14,5 @@ const nextConfig: NextConfig = {
   },
 };
 
+// @ts-expect-error - Next.js version mismatch in monorepo causes type conflicts with Serwist
 export default withSerwist(nextConfig);
