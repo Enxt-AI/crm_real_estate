@@ -233,6 +233,7 @@ export type Lead = {
       id: string;
       name: string;
       type: PipelineType;
+      stages?: PipelineStage[];
     };
   };
   currentStageId: string;
