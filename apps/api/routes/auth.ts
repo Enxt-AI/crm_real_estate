@@ -189,15 +189,36 @@ router.post("/signin", signinLimiter, async (req: Request, res: Response) => {
 
 // POST /auth/signout - User logout
 router.post("/signout", authenticate, (req: Request, res: Response) => {
-  const origin = req.headers.origin;
-  const cookieName = getCookieName(origin);
-  const options = cookieOptions(origin);
+  // Browsers require exact matching options to clear a cookie.
+  // Instead of relying on potentially stripped origin headers, 
+  // forcefully clear all variations.
+  const isSecureEnv = process.env.NODE_ENV === "production" || process.env.HTTPS_ENABLED === "true";
   
-  // Browsers require exact matching options (domain, path, secure, samesite) to clear a cookie
-  res.clearCookie(cookieName, options);
-  res.clearCookie("token", options);
-  res.clearCookie("token_web", options);
-  res.clearCookie("token_mobile", options);
+  const mobileOptions = {
+    httpOnly: true,
+    secure: isSecureEnv,
+    sameSite: "none" as const,
+    path: "/",
+  };
+  
+  const webOptions = {
+    httpOnly: true,
+    secure: isSecureEnv,
+    sameSite: "lax" as const,
+    path: "/",
+  };
+
+  // Clear specific mobile token
+  res.clearCookie("token_mobile", mobileOptions);
+  res.clearCookie("token_mobile", webOptions); // Fallback if it was set weirdly locally
+  
+  // Clear specific web token
+  res.clearCookie("token_web", webOptions);
+  
+  // Clear legacy tokens
+  res.clearCookie("token", mobileOptions);
+  res.clearCookie("token", webOptions);
+
   res.json({ message: "Signed out successfully" });
 });
 

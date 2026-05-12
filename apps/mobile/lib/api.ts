@@ -23,6 +23,7 @@ async function request<T>(endpoint: string, options: RequestOptions = {}): Promi
   const config: RequestInit = {
     method,
     credentials: "include", // Include cookies
+    cache: "no-store", // Prevent Next.js or browser fetch caching
     headers: {
       "Content-Type": "application/json",
       ...headers,
