@@ -66,10 +66,10 @@ export default function HomePage() {
             <button className="rounded-full p-2 hover:bg-neutral-100 text-neutral-600 transition-colors">
               <Filter className="h-5 w-5" />
             </button>
-            <button className="relative rounded-full p-2 hover:bg-neutral-100 text-neutral-600 transition-colors">
+            <Link href="/tasks" className="relative rounded-full p-2 hover:bg-neutral-100 text-neutral-600 transition-colors">
               <Bell className="h-5 w-5" />
               <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
-            </button>
+            </Link>
           </div>
         </div>
       </header>
@@ -84,12 +84,14 @@ export default function HomePage() {
             Here's what's happening with your leads today.
           </p>
 
-          <Button
-            className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white shadow-sm text-base font-medium flex items-center justify-center gap-2"
-          >
-            <PhoneCall className="h-4 w-4" />
-            Start Calling
-          </Button>
+          <Link href="/leads" className="w-full block">
+            <Button
+              className="w-full h-12 rounded-xl bg-neutral-900 hover:bg-neutral-800 text-white shadow-sm text-base font-medium flex items-center justify-center gap-2"
+            >
+              <PhoneCall className="h-4 w-4" />
+              Start Calling
+            </Button>
+          </Link>
         </div>
 
         {/* Grid Cards */}
