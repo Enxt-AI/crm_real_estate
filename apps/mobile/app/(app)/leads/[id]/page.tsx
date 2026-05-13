@@ -237,12 +237,24 @@ export default function LeadDetailsPage() {
                     <p className="text-sm font-bold text-brand-900">{lead.mobile || "No number"}</p>
                   </div>
                   <div className="flex gap-2">
-                    <button onClick={handleCall} className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center border border-green-200 active:bg-green-100">
-                      <Phone className="h-4 w-4 text-green-600" />
-                    </button>
-                    <button className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center shadow-sm shadow-green-200 active:bg-green-600">
-                      <MessageCircle className="h-5 w-5 text-white" />
-                    </button>
+                    {lead.mobile ? (
+                      <a href={`tel:${lead.mobile}`} className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center border border-green-200 active:bg-green-100">
+                        <Phone className="h-4 w-4 text-green-600" />
+                      </a>
+                    ) : (
+                      <button onClick={handleCall} className="h-10 w-10 rounded-full bg-green-50 flex items-center justify-center border border-green-200 active:bg-green-100">
+                        <Phone className="h-4 w-4 text-green-600" />
+                      </button>
+                    )}
+                    {lead.mobile ? (
+                      <a href={`https://wa.me/${lead.mobile.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center shadow-sm shadow-green-200 active:bg-green-600">
+                        <MessageCircle className="h-5 w-5 text-white" />
+                      </a>
+                    ) : (
+                      <button className="h-10 w-10 rounded-full bg-green-500 flex items-center justify-center shadow-sm shadow-green-200 active:bg-green-600">
+                        <MessageCircle className="h-5 w-5 text-white" />
+                      </button>
+                    )}
                   </div>
                 </div>
 
@@ -254,9 +266,15 @@ export default function LeadDetailsPage() {
                     <p className="text-xs text-brand-500 font-semibold uppercase">Email Address</p>
                     <p className="text-sm font-bold text-brand-900">{lead.email || "No email"}</p>
                   </div>
-                  <button className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-200 active:bg-blue-100">
-                    <Mail className="h-4 w-4 text-blue-600" />
-                  </button>
+                  {lead.email ? (
+                    <a href={`mailto:${lead.email}`} className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-200 active:bg-blue-100">
+                      <Mail className="h-4 w-4 text-blue-600" />
+                    </a>
+                  ) : (
+                    <button className="h-10 w-10 rounded-full bg-blue-50 flex items-center justify-center border border-blue-200 active:bg-blue-100">
+                      <Mail className="h-4 w-4 text-blue-600" />
+                    </button>
+                  )}
                 </div>
               </div>
             </div>
@@ -280,18 +298,39 @@ export default function LeadDetailsPage() {
 
             {/* Quick Actions */}
             <div className="grid grid-cols-3 gap-3">
-              <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
-                <MessageCircle className="h-6 w-6 mb-1" />
-                <span className="text-[10px] font-bold uppercase">WhatsApp</span>
-              </button>
-              <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
-                <Mail className="h-6 w-6 mb-1" />
-                <span className="text-[10px] font-bold uppercase">Email</span>
-              </button>
-              <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
-                <MessageSquare className="h-6 w-6 mb-1" />
-                <span className="text-[10px] font-bold uppercase">SMS</span>
-              </button>
+              {lead.mobile ? (
+                <a href={`https://wa.me/${lead.mobile.replace(/\D/g, '')}`} target="_blank" rel="noopener noreferrer" className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <MessageCircle className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">WhatsApp</span>
+                </a>
+              ) : (
+                <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <MessageCircle className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">WhatsApp</span>
+                </button>
+              )}
+              {lead.email ? (
+                <a href={`mailto:${lead.email}`} className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <Mail className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">Email</span>
+                </a>
+              ) : (
+                <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <Mail className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">Email</span>
+                </button>
+              )}
+              {lead.mobile ? (
+                <a href={`sms:${lead.mobile}`} className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <MessageSquare className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">SMS</span>
+                </a>
+              ) : (
+                <button className="flex flex-col items-center justify-center py-3 bg-white rounded-xl shadow-sm border border-brand-100 text-brand-600 active:bg-brand-50">
+                  <MessageSquare className="h-6 w-6 mb-1" />
+                  <span className="text-[10px] font-bold uppercase">SMS</span>
+                </button>
+              )}
             </div>
 
             {/* Deal Amount */}
@@ -574,13 +613,23 @@ export default function LeadDetailsPage() {
       {/* Floating Call Button for LEAD_INFO tab */}
       {activeTab === "LEAD_INFO" && (
         <div className="absolute bottom-[80px] left-4 right-4 z-10">
-          <Button 
-            className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-lg text-lg font-semibold flex items-center gap-2"
-            onClick={handleCall}
-          >
-            <Phone className="h-5 w-5 fill-white" />
-            Call Now
-          </Button>
+          {lead.mobile ? (
+            <a 
+              href={`tel:${lead.mobile}`}
+              className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-lg text-lg font-semibold flex items-center justify-center gap-2"
+            >
+              <Phone className="h-5 w-5 fill-white" />
+              Call Now
+            </a>
+          ) : (
+            <Button 
+              className="w-full h-14 rounded-xl bg-green-600 hover:bg-green-700 text-white shadow-lg text-lg font-semibold flex items-center gap-2"
+              onClick={handleCall}
+            >
+              <Phone className="h-5 w-5 fill-white" />
+              Call Now
+            </Button>
+          )}
         </div>
       )}
     </div>
