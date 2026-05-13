@@ -63,9 +63,6 @@ export default function HomePage() {
             <span className="text-lg font-medium tracking-tight text-neutral-900">CRM Mobile</span>
           </div>
           <div className="flex items-center gap-2">
-            <button className="rounded-full p-2 hover:bg-neutral-100 text-neutral-600 transition-colors">
-              <Filter className="h-5 w-5" />
-            </button>
             <Link href="/tasks" className="relative rounded-full p-2 hover:bg-neutral-100 text-neutral-600 transition-colors">
               <Bell className="h-5 w-5" />
               <span className="absolute right-2.5 top-2.5 h-2 w-2 rounded-full bg-red-500 ring-2 ring-white"></span>
@@ -116,10 +113,6 @@ export default function HomePage() {
         </div>
       </div>
 
-      {/* Floating Action Button */}
-      <button className="fixed bottom-20 right-5 flex h-14 w-14 items-center justify-center rounded-full bg-neutral-900 text-white shadow-lg hover:bg-neutral-800 transition-transform active:scale-95 z-40">
-        <Plus strokeWidth={2.5} className="h-6 w-6" />
-      </button>
     </div>
   );
 }
