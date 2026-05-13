@@ -377,6 +377,11 @@ export type Interaction = {
     id: string;
     fullName: string;
   };
+  lead?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+  };
   occurredAt: string;
   createdAt: string;
 };
