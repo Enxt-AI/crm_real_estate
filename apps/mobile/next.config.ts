@@ -22,4 +22,4 @@ const nextConfig: NextConfig = {
 };
 
 // Next.js version mismatch in monorepo causes type conflicts with Serwist
-export default withSerwist(nextConfig);
+export default withSerwist(nextConfig as any);
