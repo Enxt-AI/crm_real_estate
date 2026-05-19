@@ -522,23 +522,29 @@ router.delete("/:id", authenticate, requireRole("ADMIN"), async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Check if campaign has leads
-    const leadsCount = await prisma.lead.count({
-      where: { campaignId: id },
-    });
-
-    if (leadsCount > 0) {
-      return res.status(400).json({
-        error: "Cannot delete campaign with leads",
-        leadsCount,
+    await prisma.$transaction(async (tx) => {
+      // 1. Delete associated leads (which cascades to interactions, documents, etc.)
+      await tx.lead.deleteMany({
+        where: { campaignId: id },
       });
-    }
 
-    await prisma.campaign.delete({
-      where: { id },
+      // 2. Delete workflows linked to this campaign
+      await tx.workflow.deleteMany({
+        where: {
+          OR: [
+            { sourceCampaignId: id },
+            { destinationCampaignId: id }
+          ]
+        },
+      });
+
+      // 3. Finally delete the campaign
+      await tx.campaign.delete({
+        where: { id },
+      });
     });
 
-    res.json({ message: "Campaign deleted successfully" });
+    res.json({ message: "Campaign and all associated data deleted successfully" });
   } catch (error: any) {
     console.error("Error deleting campaign:", error);
     if (error.code === "P2025") {
