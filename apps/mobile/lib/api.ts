@@ -1415,4 +1415,43 @@ export const integrations = {
     }),
 };
 
+// ================================
+// WORKFLOWS API
+// ================================
+
+export type Workflow = {
+  id: string;
+  name: string;
+  trigger: string;
+  sourceCampaignId: string | null;
+  stageId: string | null;
+  tag: string | null;
+  action: string;
+  destinationCampaignId: string | null;
+  destinationStageId: string | null;
+  assignmentOption: string | null;
+  status: string;
+  lastRun: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const workflowsApi = {
+  list: () => request<Workflow[]>("/workflows"),
+  create: (data: Partial<Workflow>) =>
+    request<Workflow>("/workflows", {
+      method: "POST",
+      body: data,
+    }),
+  update: (id: string, data: Partial<Workflow>) =>
+    request<Workflow>(`/workflows/${id}`, {
+      method: "PATCH",
+      body: data,
+    }),
+  delete: (id: string) =>
+    request<{ message: string }>(`/workflows/${id}`, {
+      method: "DELETE",
+    }),
+};
+
 export { ApiError };
