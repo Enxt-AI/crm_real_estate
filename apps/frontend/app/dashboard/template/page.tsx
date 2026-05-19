@@ -364,7 +364,7 @@ export default function TemplateWizardPage() {
           {currentStep < STEPS.length - 1 ? (
             <Button
               onClick={handleNext}
-              className="w-32 bg-brand-600 hover:bg-brand-700 text-white"
+              className="w-32 bg-brand-600 hover:bg-brand-700 text-black border"
             >
               Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
