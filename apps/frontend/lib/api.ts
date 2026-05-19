@@ -1172,6 +1172,10 @@ export const tasks = {
       const data = await request<{ followUps: any[] }>("/tasks/follow-ups");
       return data.followUps;
     },
+    clear: (leadId: string) =>
+      request<{ message: string }>(`/tasks/follow-ups/${leadId}`, {
+        method: "PATCH",
+      }),
   },
 };
 
@@ -1408,6 +1412,45 @@ export const integrations = {
     request<{ message: string; imported: number; updated: number; errors: any[] }>("/integrations/upload-excel", {
       method: "POST",
       body: formData,
+    }),
+};
+
+// ================================
+// WORKFLOWS API
+// ================================
+
+export type Workflow = {
+  id: string;
+  name: string;
+  trigger: string;
+  sourceCampaignId: string | null;
+  stageId: string | null;
+  tag: string | null;
+  action: string;
+  destinationCampaignId: string | null;
+  destinationStageId: string | null;
+  assignmentOption: string | null;
+  status: string;
+  lastRun: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export const workflowsApi = {
+  list: () => request<Workflow[]>("/workflows"),
+  create: (data: Partial<Workflow>) =>
+    request<Workflow>("/workflows", {
+      method: "POST",
+      body: data,
+    }),
+  update: (id: string, data: Partial<Workflow>) =>
+    request<Workflow>(`/workflows/${id}`, {
+      method: "PATCH",
+      body: data,
+    }),
+  delete: (id: string) =>
+    request<{ message: string }>(`/workflows/${id}`, {
+      method: "DELETE",
     }),
 };
 

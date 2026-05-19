@@ -1123,7 +1123,7 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
 
         // Check for duplicates
         if (duplicateHandling !== "CREATE_NEW" && (leadData.email || leadData.mobile)) {
-          const duplicateWhere: any = { OR: [] };
+          const duplicateWhere: any = { campaignId, OR: [] };
 
           if (duplicateCheckFields.includes("email") && leadData.email) {
             duplicateWhere.OR.push({ email: leadData.email });

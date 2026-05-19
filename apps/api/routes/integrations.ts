@@ -114,6 +114,7 @@ router.post("/google-sheets/sync", authenticate, async (req: Request, res: Respo
         if (identifier) {
           const existingLead = await prisma.lead.findFirst({
             where: {
+              campaignId,
               OR: [
                 { email: leadData.email },
                 { mobile: leadData.mobile },
@@ -234,6 +235,7 @@ router.post("/google-forms/sync", authenticate, async (req: Request, res: Respon
         if (identifier) {
           const existingLead = await prisma.lead.findFirst({
             where: {
+              campaignId,
               OR: [
                 { email: leadData.email },
                 { mobile: leadData.mobile },
@@ -361,6 +363,7 @@ router.post("/webhooks/pabbly/:source/:campaignId/:stageId", async (req: Request
     if (identifier) {
       const existingLead = await prisma.lead.findFirst({
         where: {
+          campaignId,
           OR: [
             { email: leadData.email },
             { mobile: leadData.mobile },
@@ -478,6 +481,7 @@ router.post("/upload-excel", authenticate, upload.single("file"), async (req: Re
         if (identifier) {
           const existingLead = await prisma.lead.findFirst({
             where: {
+              campaignId,
               OR: [
                 { email: leadData.email },
                 { mobile: leadData.mobile },

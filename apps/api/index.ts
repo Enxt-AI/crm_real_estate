@@ -15,6 +15,7 @@ import tasksRouter from "./routes/tasks";
 import meetingsRouter from "./routes/meetings";
 import integrationsRouter from "./routes/integrations";
 import notificationsRouter from "./routes/notifications";
+import workflowsRouter from "./routes/workflows";
 import { startNotifierCron } from "./cron/notifier";
 
 const app = express();
@@ -41,6 +42,7 @@ app.use("/tasks", tasksRouter);
 app.use("/meetings", meetingsRouter);
 app.use("/integrations", integrationsRouter);
 app.use("/notifications", notificationsRouter);
+app.use("/workflows", workflowsRouter);
 
 // Start background jobs
 startNotifierCron();

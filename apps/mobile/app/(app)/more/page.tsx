@@ -2,8 +2,9 @@
 
 import { MobileHeader } from "@/components/mobile/header";
 import { useAuth } from "@/lib/auth-context";
-import { LogOut, User, Settings, HelpCircle, FileText } from "lucide-react";
+import { LogOut, User, Settings, HelpCircle, FileText, GitMerge, LayoutTemplate } from "lucide-react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 export default function MorePage() {
   const { user, logout } = useAuth();
@@ -46,6 +47,7 @@ export default function MorePage() {
             </div>
             <span className="font-semibold text-neutral-900">Settings</span>
           </button>
+
           <button className="w-full flex items-center gap-4 p-4 border-b border-neutral-100 active:bg-neutral-50 transition-colors">
             <div className="h-10 w-10 rounded-full bg-neutral-100 flex items-center justify-center text-neutral-600">
               <FileText className="h-5 w-5" />

@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Trash2 } from "lucide-react";
 import {
   Table,
   TableBody,
@@ -66,6 +67,18 @@ export default function CampaignsPage() {
       month: "short",
       day: "numeric",
     });
+  };
+
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this campaign? This action cannot be undone.")) return;
+    try {
+      await campaignsApi.delete(id);
+      toast.success("Campaign deleted successfully");
+      loadCampaigns();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete campaign");
+    }
   };
 
   if (loading) {
@@ -234,14 +247,26 @@ export default function CampaignsPage() {
                         )}
                       </TableCell>
                       <TableCell>
-                        <Link 
-                          href={`/dashboard/campaigns/${campaign.id}`}
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <Button variant="ghost" size="sm">
-                            View Details
-                          </Button>
-                        </Link>
+                        <div className="flex items-center gap-2">
+                          <Link 
+                            href={`/dashboard/campaigns/${campaign.id}`}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <Button variant="ghost" size="sm">
+                              View Details
+                            </Button>
+                          </Link>
+                          {user && (user.role === "ADMIN") && (
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                              onClick={(e) => handleDelete(e, campaign.id)}
+                            >
+                              <Trash2 className="w-4 h-4" />
+                            </Button>
+                          )}
+                        </div>
                       </TableCell>
                     </TableRow>
                   ))}

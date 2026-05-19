@@ -36,29 +36,46 @@ export default function TasksPage() {
   const loadData = async () => {
     try {
       setLoading(true);
-      const tasksData = await tasks.list();
-      setTaskList(tasksData);
+      const [tasksData, followUpsData] = await Promise.all([
+        tasks.list(),
+        tasks.followUps.list()
+      ]);
+      
+      const mappedFollowUps = followUpsData.map((lead: any) => ({
+        id: `followup-${lead.id}`,
+        title: `Follow up with ${lead.firstName} ${lead.lastName}`,
+        description: `Stage: ${lead.currentStage?.name || 'Unknown'}`,
+        dueDate: lead.nextFollowUpAt,
+        priority: lead.priority || "MEDIUM",
+        isCompleted: false,
+        lead: { firstName: lead.firstName, lastName: lead.lastName },
+        isFollowUp: true,
+        leadId: lead.id
+      })) as any[];
+      
+      const allTasks = [...tasksData, ...mappedFollowUps];
+      setTaskList(allTasks);
       
       // Calculate stats from task list
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       const calculatedStats = {
-        dueToday: tasksData.filter((t) => {
+        dueToday: allTasks.filter((t) => {
           const d = new Date(t.dueDate);
           d.setHours(0, 0, 0, 0);
           return !t.isCompleted && d.getTime() === today.getTime();
         }).length,
-        upcoming: tasksData.filter((t) => {
+        upcoming: allTasks.filter((t) => {
           const d = new Date(t.dueDate);
           d.setHours(0, 0, 0, 0);
           return !t.isCompleted && d.getTime() > today.getTime();
         }).length,
-        expired: tasksData.filter((t) => {
+        expired: allTasks.filter((t) => {
           const d = new Date(t.dueDate);
           d.setHours(0, 0, 0, 0);
           return !t.isCompleted && d.getTime() < today.getTime();
         }).length,
-        completed: tasksData.filter((t) => t.isCompleted).length,
+        completed: allTasks.filter((t) => t.isCompleted).length,
       };
       setStats(calculatedStats);
     } catch (error) {
@@ -108,7 +125,12 @@ export default function TasksPage() {
 
   const handleToggleComplete = async (taskId: string) => {
     try {
-      await tasks.toggleComplete(taskId);
+      if (taskId.startsWith("followup-")) {
+        const leadId = taskId.replace("followup-", "");
+        await tasks.followUps.clear(leadId);
+      } else {
+        await tasks.toggleComplete(taskId);
+      }
       loadData();
     } catch (error) {
       console.error("Failed to toggle task:", error);
@@ -120,7 +142,12 @@ export default function TasksPage() {
     if (!confirm("Are you sure you want to delete this task?")) return;
 
     try {
-      await tasks.delete(taskId);
+      if (taskId.startsWith("followup-")) {
+        const leadId = taskId.replace("followup-", "");
+        await tasks.followUps.clear(leadId);
+      } else {
+        await tasks.delete(taskId);
+      }
       toast.success("Task deleted successfully");
       loadData();
     } catch (error) {

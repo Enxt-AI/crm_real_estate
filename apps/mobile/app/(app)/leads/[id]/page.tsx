@@ -82,9 +82,12 @@ export default function LeadDetailsPage() {
       }
 
       if (Object.keys(updates).length > 0) {
-        const updatedLead = await leadsApi.update(lead.id, updates);
-        setLead(updatedLead);
+        await leadsApi.update(lead.id, updates);
       }
+
+      // Re-fetch lead to get latest state from background workflow engine
+      const refreshedLead = await leadsApi.get(lead.id);
+      setLead(refreshedLead);
 
       toast.success("Lead disposed successfully");
       setDisposeRemark("");

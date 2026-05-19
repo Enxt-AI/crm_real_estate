@@ -9,38 +9,39 @@ datasource db {
 }
 
 model User {
-  id                   String            @id @default(uuid())
-  username             String            @unique
+  id                   String             @id @default(uuid())
+  username             String             @unique
   passwordHash         String
   fullName             String
-  role                 Role              @default(TELE_CALLER)
-  contactNumber         String?
-  employeeId            String?
-  isActive             Boolean           @default(true)
-  needsPasswordChange  Boolean           @default(true)
+  role                 Role               @default(TELE_CALLER)
+  isActive             Boolean            @default(true)
+  needsPasswordChange  Boolean            @default(true)
   lastLoginAt          DateTime?
-  createdAt            DateTime          @default(now())
-  updatedAt            DateTime          @updatedAt
-  email                String?           @unique
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  email                String?            @unique
   googleCalendarId     String?
-  googleCalendarSynced Boolean           @default(false)
-  googleSheetsSynced    Boolean           @default(false)
+  googleCalendarSynced Boolean            @default(false)
   googleRefreshToken   String?
-  createdCampaigns     Campaign[]        @relation("CampaignCreator")
-  createdFolders       Folder[]          @relation("FolderCreator")
-  createdInteractions  Interaction[]     @relation("InteractionCreator")
-  assignedLeads        Lead[]            @relation("LeadOwner")
-  uploadedDocuments    ManagedDocument[] @relation("DocumentUploader")
-  meetings             Meeting[]         @relation("MeetingOrganizer")
-  meetingAttendees     MeetingAttendee[] @relation("MeetingAttendee")
-  notes                Note[]            @relation("NoteAuthor")
-  createdPipelines     Pipeline[]        @relation("PipelineCreator")
-  listedProperties     Property[]        @relation("PropertyListedBy")
-  tasks                Task[]            @relation("TaskAssignee")
-  assignedCampaigns    Campaign[]        @relation("AssignedCampaigns")
-  sharedDocuments      ManagedDocument[] @relation("SharedDocuments")
-  sharedFolders        Folder[]          @relation("SharedFolders")
+  contactNumber        String?
+  employeeId           String?
+  googleSheetsSynced   Boolean            @default(false)
+  createdCampaigns     Campaign[]         @relation("CampaignCreator")
+  createdFolders       Folder[]           @relation("FolderCreator")
+  createdInteractions  Interaction[]      @relation("InteractionCreator")
+  assignedLeads        Lead[]             @relation("LeadOwner")
+  uploadedDocuments    ManagedDocument[]  @relation("DocumentUploader")
+  meetings             Meeting[]          @relation("MeetingOrganizer")
+  meetingAttendees     MeetingAttendee[]  @relation("MeetingAttendee")
+  notes                Note[]             @relation("NoteAuthor")
+  createdPipelines     Pipeline[]         @relation("PipelineCreator")
+  listedProperties     Property[]         @relation("PropertyListedBy")
   pushSubscriptions    PushSubscription[]
+  tasks                Task[]             @relation("TaskAssignee")
+  createdWorkflows     Workflow[]         @relation("WorkflowCreator")
+  assignedCampaigns    Campaign[]         @relation("AssignedCampaigns")
+  sharedDocuments      ManagedDocument[]  @relation("SharedDocuments")
+  sharedFolders        Folder[]           @relation("SharedFolders")
 
   @@index([username])
   @@index([isActive])
@@ -66,44 +67,48 @@ model Pipeline {
 }
 
 model PipelineStage {
-  id          String   @id @default(uuid())
+  id          String     @id @default(uuid())
   pipelineId  String
   name        String
   description String?
   order       Int
-  color       String   @default("#3B82F6")
-  isDefault   Boolean  @default(false)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  isFinal     Boolean  @default(false)
+  color       String     @default("#3B82F6")
+  isDefault   Boolean    @default(false)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  isFinal     Boolean    @default(false)
   leads       Lead[]
-  pipeline    Pipeline @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  pipeline    Pipeline   @relation(fields: [pipelineId], references: [id], onDelete: Cascade)
+  workflows   Workflow[] @relation("WorkflowStage")
+  destinationWorkflows Workflow[] @relation("WorkflowDestinationStage")
 
   @@unique([pipelineId, order])
   @@index([pipelineId, order])
 }
 
 model Campaign {
-  id                 String             @id @default(uuid())
-  name               String
-  description        String?
-  pipelineId         String
-  status             CampaignStatus     @default(ACTIVE)
-  startDate          DateTime
-  endDate            DateTime?
-  budget             Decimal?           @db.Decimal(12, 2)
-  actualSpend        Decimal?           @db.Decimal(12, 2)
-  source             String?
-  sourceDetails      String?
-  assignedToIds      String[]
-  createdById        String
-  createdAt          DateTime           @default(now())
-  updatedAt          DateTime           @updatedAt
-  createdBy          User               @relation("CampaignCreator", fields: [createdById], references: [id])
-  pipeline           Pipeline           @relation(fields: [pipelineId], references: [id])
-  campaignProperties CampaignProperty[]
-  leads              Lead[]
-  assignedTo         User[]             @relation("AssignedCampaigns")
+  id                   String             @id @default(uuid())
+  name                 String
+  description          String?
+  pipelineId           String
+  status               CampaignStatus     @default(ACTIVE)
+  startDate            DateTime
+  endDate              DateTime?
+  budget               Decimal?           @db.Decimal(12, 2)
+  actualSpend          Decimal?           @db.Decimal(12, 2)
+  source               String?
+  sourceDetails        String?
+  assignedToIds        String[]
+  createdById          String
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  createdBy            User               @relation("CampaignCreator", fields: [createdById], references: [id])
+  pipeline             Pipeline           @relation(fields: [pipelineId], references: [id])
+  campaignProperties   CampaignProperty[]
+  leads                Lead[]
+  destinationWorkflows Workflow[]         @relation("WorkflowDestinationCampaign")
+  sourceWorkflows      Workflow[]         @relation("WorkflowSourceCampaign")
+  assignedTo           User[]             @relation("AssignedCampaigns")
 
   @@index([pipelineId, status])
   @@index([status, startDate])
@@ -304,21 +309,21 @@ model MeetingAttendee {
 }
 
 model Task {
-  id           String    @id @default(uuid())
-  title        String
-  description  String?
-  priority     Priority  @default(MEDIUM)
-  type         TaskType  @default(GENERAL)
-  isCompleted  Boolean   @default(false)
-  notificationSent Boolean @default(false)
-  completedAt  DateTime?
-  assignedToId String
-  dueDate      DateTime
-  leadId       String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  assignedTo   User      @relation("TaskAssignee", fields: [assignedToId], references: [id])
-  lead         Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  id               String    @id @default(uuid())
+  title            String
+  description      String?
+  priority         Priority  @default(MEDIUM)
+  type             TaskType  @default(GENERAL)
+  isCompleted      Boolean   @default(false)
+  completedAt      DateTime?
+  assignedToId     String
+  dueDate          DateTime
+  leadId           String?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  notificationSent Boolean   @default(false)
+  assignedTo       User      @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  lead             Lead?     @relation(fields: [leadId], references: [id], onDelete: Cascade)
 
   @@index([assignedToId, isCompleted])
   @@index([dueDate, isCompleted])
@@ -393,6 +398,45 @@ model ManagedDocument {
   @@index([type])
   @@index([uploadedById])
   @@index([s3Key])
+}
+
+model PushSubscription {
+  id        String   @id @default(uuid())
+  userId    String
+  endpoint  String
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Workflow {
+  id                    String         @id @default(uuid())
+  name                  String
+  trigger               String
+  sourceCampaignId      String?
+  stageId               String?
+  tag                   String?
+  action                String
+  destinationCampaignId String?
+  destinationStageId    String?
+  assignmentOption      String?
+  status                String         @default("Active")
+  lastRun               DateTime?
+  createdById           String
+  createdAt             DateTime       @default(now())
+  updatedAt             DateTime       @updatedAt
+  createdBy             User           @relation("WorkflowCreator", fields: [createdById], references: [id])
+  destinationCampaign   Campaign?      @relation("WorkflowDestinationCampaign", fields: [destinationCampaignId], references: [id])
+  destinationStage      PipelineStage? @relation("WorkflowDestinationStage", fields: [destinationStageId], references: [id])
+  sourceCampaign        Campaign?      @relation("WorkflowSourceCampaign", fields: [sourceCampaignId], references: [id])
+  stage                 PipelineStage? @relation("WorkflowStage", fields: [stageId], references: [id])
+
+  @@index([createdById])
+  @@index([sourceCampaignId])
+  @@index([status])
 }
 
 enum Role {
@@ -535,16 +579,4 @@ enum FolderType {
 enum DocumentType {
   SHARED
   PERSONAL
-}
-
-model PushSubscription {
-  id        String   @id @default(uuid())
-  userId    String
-  endpoint  String
-  p256dh    String
-  auth      String
-  createdAt DateTime @default(now())
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
 }

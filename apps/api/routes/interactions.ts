@@ -2,6 +2,7 @@ import { Router } from "express";
 import prisma from "@db/client";
 import { authenticate } from "../middleware/auth";
 import { createInteractionSchema } from "@repo/zod";
+import { processInteractionEvent } from "../lib/workflow-engine";
 
 const router = Router();
 
@@ -201,6 +202,11 @@ router.post("/", authenticate, async (req, res) => {
       data: { lastContactedAt: new Date() },
     });
 
+    // Trigger workflow engine (fire and forget)
+    await processInteractionEvent(interaction.id).catch(err => 
+      console.error("Workflow engine error:", err)
+    );
+
     res.status(201).json(interaction);
   } catch (error: any) {
     console.error("Error creating interaction:", error);
@@ -268,6 +274,11 @@ router.post("/leads/:leadId", authenticate, async (req, res) => {
       where: { id: leadId },
       data: { lastContactedAt: new Date() },
     });
+
+    // Trigger workflow engine (fire and forget)
+    await processInteractionEvent(interaction.id).catch(err => 
+      console.error("Workflow engine error:", err)
+    );
 
     res.status(201).json(interaction);
   } catch (error: any) {
