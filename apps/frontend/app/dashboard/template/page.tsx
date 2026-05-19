@@ -80,7 +80,7 @@ export default function TemplateWizardPage() {
     },
     meeting: { title: "", startTime: "", endTime: "" },
     leads: { items: [] as { firstName: string; lastName: string; email: string; mobile: string; leadType: string }[], file: null as File | null },
-    workflows: [{ name: "", trigger: "Call - Connected", action: "change_stage", destinationStageIndex: 1 }],
+    workflows: [{ name: "", trigger: "call_connected", action: "change_stage", destinationStageIndex: 1 }],
     document: { name: "", file: null as File | null }
   });
 
@@ -723,7 +723,7 @@ function LeadsStep({ state, onChange }: { state: { items: any[], file: File | nu
 
 function WorkflowStep({ state, pipelineStages, onChange }: { state: any[], pipelineStages: any[], onChange: (val: any) => void }) {
   const addWorkflow = () => {
-    onChange([...state, { name: "", trigger: "Call - Connected", action: "change_stage", destinationStageIndex: 1 }]);
+    onChange([...state, { name: "", trigger: "call_connected", action: "change_stage", destinationStageIndex: 1 }]);
   };
 
   const updateWorkflow = (idx: number, field: string, val: any) => {
@@ -779,10 +779,10 @@ function WorkflowStep({ state, pipelineStages, onChange }: { state: any[], pipel
                   onChange={e => updateWorkflow(idx, "trigger", e.target.value)}
                   className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all bg-white"
                 >
-                  <option value="Call - Connected">Call is Connected</option>
-                  <option value="Call - Unanswered">Call is Unanswered</option>
-                  <option value="Email - Sent">Email is Sent</option>
-                  <option value="Meeting - Scheduled">Meeting is Scheduled</option>
+                  <option value="call_connected">Call is Connected</option>
+                  <option value="call_disconnected">Call is Unanswered</option>
+                  <option value="email_sent">Email is Sent</option>
+                  <option value="meeting_scheduled">Meeting is Scheduled</option>
                 </select>
               </div>
 
