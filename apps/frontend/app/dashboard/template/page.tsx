@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
-  campaigns, pipelines, meetings, leads, workflowsApi, documents, integrations
+  campaigns, pipelines, meetings, leads, workflowsApi, documents, integrations, auth, type User
 } from "@/lib/api";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -32,6 +32,15 @@ export default function TemplateWizardPage() {
 
   const [currentStep, setCurrentStep] = useState(0);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [usersList, setUsersList] = useState<User[]>([]);
+
+  useEffect(() => {
+    if (showWizard) {
+      auth.listUsers()
+        .then(users => setUsersList(users.filter(u => u.isActive)))
+        .catch(console.error);
+    }
+  }, [showWizard]);
 
   useEffect(() => {
     if (!showWizard) {
@@ -60,7 +69,7 @@ export default function TemplateWizardPage() {
 
   // --- Wizard State ---
   const [state, setState] = useState({
-    campaign: { name: "", budget: "", startDate: new Date().toISOString().split("T")[0], endDate: "", source: "OTHER" },
+    campaign: { name: "", budget: "", startDate: new Date().toISOString().split("T")[0], endDate: "", source: "OTHER", assignedToIds: [] as string[] },
     pipeline: {
       name: "", type: "BUYER", stages: [
         { name: "New", color: "#3B82F6", isDefault: true },
@@ -111,7 +120,7 @@ export default function TemplateWizardPage() {
         endDate: state.campaign.endDate ? new Date(state.campaign.endDate).toISOString() : undefined,
         budget: state.campaign.budget ? Number(state.campaign.budget) : undefined,
         pipelineId: pipelineId,
-        assignedToIds: [] // Can assign to current user if needed
+        assignedToIds: state.campaign.assignedToIds || []
       });
       const campaignId = createdCampaign.id;
 
@@ -341,7 +350,7 @@ export default function TemplateWizardPage() {
           </div>
 
           <div className="animate-in fade-in slide-in-from-bottom-4 duration-500 mb-8">
-            {currentStep === 0 && <CampaignStep state={state.campaign} onChange={(data) => updateState("campaign", data)} />}
+            {currentStep === 0 && <CampaignStep state={state.campaign} onChange={(data) => updateState("campaign", data)} usersList={usersList} />}
             {currentStep === 1 && <PipelineStep state={state.pipeline} onChange={(data) => updateState("pipeline", data)} />}
             {currentStep === 2 && <MeetingStep state={state.meeting} onChange={(data) => updateState("meeting", data)} />}
             {currentStep === 3 && <LeadsStep state={state.leads} onChange={(data) => updateState("leads", data)} />}
@@ -364,7 +373,7 @@ export default function TemplateWizardPage() {
           {currentStep < STEPS.length - 1 ? (
             <Button
               onClick={handleNext}
-              className="w-32 bg-brand-600 hover:bg-brand-700 text-black border"
+              className="w-32"
             >
               Next <ChevronRight className="w-4 h-4 ml-1" />
             </Button>
@@ -372,7 +381,7 @@ export default function TemplateWizardPage() {
             <Button
               onClick={handleSubmit}
               disabled={isSubmitting}
-              className="w-48 bg-gradient-to-r from-brand-600 to-brand-500 hover:from-brand-700 hover:to-brand-600 text-white shadow-md hover:shadow-lg transition-all"
+              className="w-48"
             >
               {isSubmitting ? (
                 <><Loader2 className="w-4 h-4 mr-2 animate-spin" /> Finalizing...</>
@@ -391,7 +400,15 @@ export default function TemplateWizardPage() {
 // STEP COMPONENTS
 // ==========================================
 
-function CampaignStep({ state, onChange }: { state: any, onChange: (val: any) => void }) {
+function CampaignStep({ state, onChange, usersList }: { state: any, onChange: (val: any) => void, usersList: User[] }) {
+  const toggleUserSelection = (userId: string) => {
+    const prev = state.assignedToIds || [];
+    const next = prev.includes(userId)
+      ? prev.filter((id: string) => id !== userId)
+      : [...prev, userId];
+    onChange({ ...state, assignedToIds: next });
+  };
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 gap-6 max-w-3xl">
       <div className="space-y-2">
@@ -435,6 +452,53 @@ function CampaignStep({ state, onChange }: { state: any, onChange: (val: any) =>
           <option value="REFERRAL">Referral</option>
           <option value="OTHER">Other</option>
         </select>
+      </div>
+
+      <div className="space-y-3 col-span-1 md:col-span-2 pt-4 border-t border-neutral-100">
+        <label className="text-sm font-medium text-neutral-700">Assigned Users (Optional)</label>
+        <div className="max-h-48 space-y-2 overflow-y-auto rounded-md border border-neutral-200 p-3 bg-white">
+          {usersList.length === 0 ? (
+            <p className="text-sm text-neutral-500">No active users available</p>
+          ) : (
+            usersList.map((user) => (
+              <div
+                key={user.id}
+                className="flex items-center gap-3 rounded-md p-2 hover:bg-neutral-50"
+              >
+                <input
+                  type="checkbox"
+                  id={`user-${user.id}`}
+                  checked={(state.assignedToIds || []).includes(user.id)}
+                  onChange={() => toggleUserSelection(user.id)}
+                  className="h-4 w-4 rounded border-neutral-300"
+                />
+                <label
+                  htmlFor={`user-${user.id}`}
+                  className="flex flex-1 cursor-pointer items-center gap-2"
+                >
+                  <span className="text-sm font-medium">{user.fullName}</span>
+                  <Badge
+                    variant={
+                      user.role === "ADMIN"
+                        ? "default"
+                        : user.role === "MANAGER"
+                          ? "secondary"
+                          : "outline"
+                    }
+                    className="text-xs"
+                  >
+                    {user.role}
+                  </Badge>
+                </label>
+              </div>
+            ))
+          )}
+        </div>
+        {(state.assignedToIds || []).length > 0 && (
+          <p className="text-xs text-neutral-500">
+            {(state.assignedToIds || []).length} user{(state.assignedToIds || []).length > 1 ? "s" : ""} selected
+          </p>
+        )}
       </div>
     </div>
   );
