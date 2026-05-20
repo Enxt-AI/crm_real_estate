@@ -161,7 +161,7 @@ export function CreatePropertyDialog({
     }
 
     if (!price || price.trim() === "" || parseFloat(price) <= 0) {
-      toast.error("Please enter a valid listing price greater than $0");
+      toast.error("Please enter a valid listing price greater than ₹0");
       return;
     }
 

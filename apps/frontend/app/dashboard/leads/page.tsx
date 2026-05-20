@@ -106,7 +106,7 @@ export default function LeadsPage() {
 
   const formatDate = (dateString: string | null) => {
     if (!dateString) return "—";
-    return new Date(dateString).toLocaleDateString("en-US", {
+    return new Date(dateString).toLocaleDateString("en-IN", {
       month: "short",
       day: "numeric",
       year: "numeric",
@@ -117,7 +117,7 @@ export default function LeadsPage() {
     if (!amount) return "—";
     return new Intl.NumberFormat("en-US", {
       style: "currency",
-      currency: "USD",
+      currency: "INR",
       minimumFractionDigits: 0,
       maximumFractionDigits: 0,
     }).format(amount);

@@ -122,7 +122,7 @@ function LeadCard({
 
           {lead.budgetMin && lead.budgetMax && (
             <div className="text-xs text-muted-foreground">
-              Budget: ${lead.budgetMin.toLocaleString()} - ${lead.budgetMax.toLocaleString()}
+              Budget: ₹{lead.budgetMin.toLocaleString()} - ${lead.budgetMax.toLocaleString()}
             </div>
           )}
 

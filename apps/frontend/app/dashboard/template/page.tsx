@@ -262,7 +262,7 @@ export default function TemplateWizardPage() {
                   {template.budget && (
                     <div className="flex justify-between items-center">
                       <span className="flex items-center gap-2"><Settings className="w-4 h-4 text-neutral-400" /> Budget</span>
-                      <span className="font-medium text-neutral-900">${template.budget}</span>
+                      <span className="font-medium text-neutral-900">₹{template.budget}</span>
                     </div>
                   )}
                 </CardContent>
