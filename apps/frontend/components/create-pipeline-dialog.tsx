@@ -51,9 +51,9 @@ export function CreatePipelineDialog({
   const [type, setType] = useState<PipelineType>("BUYER");
   const [stages, setStages] = useState<Stage[]>([
     { name: "New", description: "", color: "#3B82F6" },
-    { name: "Contacted", description: "", color: "#10B981" },
-    { name: "Qualified", description: "", color: "#F59E0B" },
-    { name: "Closed", description: "", color: "#8B5CF6" },
+    { name: "Contacted", description: "", color: "#F59E0B" },
+    { name: "Qualified", description: "", color: "#10B981" },
+    { name: "Proposal", description: "", color: "#8B5CF6" },
   ]);
   const [isCreating, setIsCreating] = useState(false);
 
@@ -65,9 +65,9 @@ export function CreatePipelineDialog({
       setType("BUYER");
       setStages([
         { name: "New", description: "", color: "#3B82F6" },
-        { name: "Contacted", description: "", color: "#10B981" },
-        { name: "Qualified", description: "", color: "#F59E0B" },
-        { name: "Closed", description: "", color: "#8B5CF6" },
+        { name: "Contacted", description: "", color: "#F59E0B" },
+        { name: "Qualified", description: "", color: "#10B981" },
+        { name: "Proposal", description: "", color: "#8B5CF6" },
       ]);
     }
   }, [dialogOpen]);

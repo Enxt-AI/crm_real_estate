@@ -89,8 +89,11 @@ export async function uploadToS3(
     console.log("S3 upload command sent successfully");
 
     return { success: true, key };
-  } catch (error) {
+  } catch (error: any) {
     console.error("S3 upload error:", error);
+    console.error("S3 error stack:", error.stack);
+    console.error("S3 error code:", error.code);
+    console.error("S3 error details:", JSON.stringify(error, null, 2));
     return {
       success: false,
       error: error instanceof Error ? error.message : "Failed to upload file",

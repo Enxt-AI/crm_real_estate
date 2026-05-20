@@ -49,7 +49,7 @@ startNotifierCron();
 
 // Health check
 app.get("/health", (_req, res) => {
-  res.json({ status: "ok" });
+  res.json({ status: "ok", awsRegion: process.env.AWS_REGION, s3Bucket: process.env.S3_BUCKET_NAME });
 });
 
 const PORT = parseInt(process.env.PORT || "3001", 10);

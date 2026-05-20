@@ -197,6 +197,27 @@ router.put("/:id", authenticate, requireRole("ADMIN", "MANAGER"), async (req, re
   }
 });
 
+// Delete pipeline (soft delete)
+router.delete("/:id", authenticate, requireRole("ADMIN", "MANAGER"), async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Soft delete by setting isActive to false
+    await prisma.pipeline.update({
+      where: { id },
+      data: { isActive: false },
+    });
+
+    res.json({ message: "Pipeline deleted successfully" });
+  } catch (error: any) {
+    console.error("Error deleting pipeline:", error);
+    if (error.code === "P2025") {
+      return res.status(404).json({ error: "Pipeline not found" });
+    }
+    res.status(500).json({ error: "Failed to delete pipeline" });
+  }
+});
+
 // Add stage to pipeline
 router.post("/:id/stages", authenticate, requireRole("ADMIN", "MANAGER"), async (req, res) => {
   try {

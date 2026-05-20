@@ -75,7 +75,7 @@ export default function TemplateWizardPage() {
         { name: "New", color: "#3B82F6", isDefault: true },
         { name: "Contacted", color: "#F59E0B", isDefault: false },
         { name: "Qualified", color: "#10B981", isDefault: false },
-        { name: "Closed", color: "#6366F1", isDefault: false }
+        { name: "Proposal", color: "#8B5CF6", isDefault: false }
       ]
     },
     meeting: { title: "", startTime: "", endTime: "" },

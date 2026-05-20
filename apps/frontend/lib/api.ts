@@ -597,8 +597,13 @@ export const pipelines = {
 
   update: (id: string, data: { name?: string; description?: string; isActive?: boolean }) =>
     request<Pipeline>(`/pipelines/${id}`, {
-      method: "PATCH",
+      method: "PUT",
       body: data,
+    }),
+
+  delete: (id: string) =>
+    request<{ message: string }>(`/pipelines/${id}`, {
+      method: "DELETE",
     }),
 
   addStage: (id: string, data: {

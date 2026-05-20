@@ -9,6 +9,7 @@ import { pipelines as pipelinesApi, type Pipeline, type PipelineStage } from "@/
 import { useAuth } from "@/lib/auth-context";
 import { CreatePipelineDialog } from "@/components/create-pipeline-dialog";
 import { toast } from "sonner";
+import { Trash2 } from "lucide-react";
 
 export default function PipelinesPage() {
   const { user } = useAuth();
@@ -31,6 +32,18 @@ export default function PipelinesPage() {
       setLoading(false);
     }
   }
+
+  const handleDeletePipeline = async (e: React.MouseEvent, id: string) => {
+    e.stopPropagation();
+    if (!window.confirm("Are you sure you want to delete this pipeline?")) return;
+    try {
+      await pipelinesApi.delete(id);
+      toast.success("Pipeline deleted successfully");
+      loadPipelines();
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete pipeline");
+    }
+  };
 
   if (loading) {
     return (
@@ -80,6 +93,16 @@ export default function PipelinesPage() {
                     </p>
                   )}
                 </div>
+                {user && (user.role === "ADMIN" || user.role === "MANAGER") && (
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 text-red-500 hover:text-red-700 hover:bg-red-50 -mt-1 -mr-1 shrink-0"
+                    onClick={(e) => handleDeletePipeline(e, pipeline.id)}
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </Button>
+                )}
               </div>
             </CardHeader>
             <CardContent>
