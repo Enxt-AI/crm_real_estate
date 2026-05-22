@@ -194,6 +194,51 @@ function extractFormId(urlOrId: string): string {
   return match ? match[1] : urlOrId;
 }
 
+// GET /integrations/google-forms/status - Check if Google account is connected and get default forms url
+router.get("/google-forms/status", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { googleRefreshToken: true, googleFormsUrl: true },
+    });
+
+    res.json({
+      connected: !!user?.googleRefreshToken,
+      defaultFormsUrl: user?.googleFormsUrl || null,
+    });
+  } catch (error) {
+    console.error("Google Forms status error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /integrations/google-forms/config - Save default Google Forms URL
+router.post("/google-forms/config", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    const userId = req.user!.userId;
+
+    if (!url) {
+      res.status(400).json({ error: "Missing url" });
+      return;
+    }
+
+    await prisma.user.update({
+      where: { id: userId },
+      data: { googleFormsUrl: url },
+    });
+
+    res.json({
+      success: true,
+      defaultFormsUrl: url,
+    });
+  } catch (error) {
+    console.error("Google Forms config error:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 // GET /integrations/google-forms/questions - Fetch questions from a Google Form
 router.get("/google-forms/questions", authenticate, async (req: Request, res: Response) => {
   try {

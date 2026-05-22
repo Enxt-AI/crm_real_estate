@@ -181,6 +181,15 @@ export default function TemplateWizardPage() {
         }
       }
 
+      // Integration Config (Forms)
+      if (state.leads.integrationType === "GOOGLE_FORMS" && state.leads.integrationUrl) {
+        try {
+          await integrations.saveGoogleFormsConfig(state.leads.integrationUrl);
+        } catch (err) {
+          console.error("Failed to save forms url:", err);
+        }
+      }
+
       // Integration Config (Drive)
       if (state.leads.integrationType === "GOOGLE_DRIVE" && state.leads.integrationFolderId) {
         try {

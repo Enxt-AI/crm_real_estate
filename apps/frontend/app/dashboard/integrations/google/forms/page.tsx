@@ -40,8 +40,12 @@ export default function GoogleFormsPage() {
     async function init() {
       setIsLoading(true);
       try {
-        const statusData = await integrations.getGoogleSheetsStatus();
+        const statusData = await integrations.getGoogleFormsStatus();
         setIsConnected(statusData.connected);
+
+        if (statusData.defaultFormsUrl) {
+          setConfig(prev => ({ ...prev, formId: statusData.defaultFormsUrl }));
+        }
 
         const [camps, pipes] = await Promise.all([
           campaigns.list(),
@@ -92,6 +96,13 @@ export default function GoogleFormsPage() {
       if (data.questions) {
         setQuestions(data.questions);
         toast.success("Questions fetched successfully!");
+        
+        // Save the URL as default
+        try {
+          await integrations.saveGoogleFormsConfig(config.formId);
+        } catch (err) {
+          console.error("Failed to save default Forms URL", err);
+        }
       } else {
         throw new Error("Failed to fetch questions");
       }

@@ -111,6 +111,13 @@ export default function GoogleSheetsPage() {
       if (data.headers) {
         setHeaders(data.headers);
         toast.success("Headers fetched successfully!");
+
+        // Save the URL as default
+        try {
+          await integrations.saveGoogleSheetsConfig(config.googleSheetsUrl);
+        } catch (err) {
+          console.error("Failed to save default Sheets URL", err);
+        }
       } else {
         throw new Error("Failed to fetch headers");
       }

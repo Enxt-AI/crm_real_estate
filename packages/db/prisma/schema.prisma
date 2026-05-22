@@ -28,6 +28,7 @@ model User {
   employeeId           String?
   googleSheetsSynced   Boolean            @default(false)
   googleSheetsUrl      String?
+  googleFormsUrl       String?
   createdCampaigns     Campaign[]         @relation("CampaignCreator")
   createdFolders       Folder[]           @relation("FolderCreator")
   createdInteractions  Interaction[]      @relation("InteractionCreator")

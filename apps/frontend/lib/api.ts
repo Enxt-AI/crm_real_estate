@@ -1404,6 +1404,15 @@ export const integrations = {
       body: data,
     }),
 
+  getGoogleFormsStatus: () =>
+    request<{ connected: boolean; defaultFormsUrl?: string | null }>("/integrations/google-forms/status"),
+
+  saveGoogleFormsConfig: (url: string) =>
+    request<{ success: boolean; defaultFormsUrl: string }>("/integrations/google-forms/config", {
+      method: "POST",
+      body: { url },
+    }),
+
   getGoogleFormsQuestions: (formId: string) =>
     request<{ questions: { id: string; title: string }[] }>(`/integrations/google-forms/questions?formId=${formId}`),
 
