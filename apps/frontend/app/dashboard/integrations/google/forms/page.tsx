@@ -11,9 +11,9 @@ import { auth, pipelines, campaigns, integrations } from "@/lib/api";
 
 const LEAD_FIELDS = [
   { id: "firstName", label: "First Name", required: true },
-  { id: "lastName", label: "Last Name", required: true },
-  { id: "email", label: "Email" },
-  { id: "mobile", label: "Mobile" },
+  { id: "lastName", label: "Last Name" },
+  { id: "email", label: "Email (Required if no mobile)" },
+  { id: "mobile", label: "Mobile (Required if no email)" },
   { id: "alternatePhone", label: "Alternate Phone" },
   { id: "leadType", label: "Lead Type" },
   { id: "budgetMin", label: "Budget Min" },
@@ -34,7 +34,7 @@ export default function GoogleFormsPage() {
     mapping: {} as Record<string, string>,
   });
 
-  const [questions, setQuestions] = useState<{id: string, title: string}[]>([]);
+  const [questions, setQuestions] = useState<{ id: string, title: string }[]>([]);
 
   useEffect(() => {
     async function init() {
@@ -106,7 +106,11 @@ export default function GoogleFormsPage() {
     setIsLoading(true);
     try {
       const data = await integrations.syncGoogleForms(config);
-      toast.success(`Sync complete: ${data.imported} imported, ${data.updated} updated`);
+      if (data.errors && data.errors.length > 0) {
+        toast.warning(`Sync complete: ${data.imported} imported, ${data.updated} updated. ${data.errors.length} errors. First error: ${data.errors[0].error}`);
+      } else {
+        toast.success(`Sync complete: ${data.imported} imported, ${data.updated} updated`);
+      }
     } catch (error: any) {
       toast.error(error.message || "Error during sync");
     } finally {
@@ -158,9 +162,9 @@ export default function GoogleFormsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Form ID</Label>
+                <Label>Google Forms URL</Label>
                 <Input
-                  placeholder="Enter Form ID"
+                  placeholder="https://docs.google.com/forms/d/..."
                   value={config.formId}
                   onChange={e => setConfig(prev => ({ ...prev, formId: e.target.value }))}
                 />

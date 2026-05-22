@@ -21,15 +21,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { 
-  leads as leadsApi, 
+import {
+  leads as leadsApi,
   campaigns as campaignsApi,
   pipelines as pipelinesApi,
-  type LeadType, 
+  type LeadType,
   type Priority,
   type Campaign,
   type Pipeline,
-  type PipelineStage 
+  type PipelineStage
 } from "@/lib/api";
 import { toast } from "sonner";
 
@@ -58,7 +58,7 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = open !== undefined;
   const dialogOpen = isControlled ? open : internalOpen;
-  const setDialogOpen = isControlled ? (onOpenChange || (() => {})) : setInternalOpen;
+  const setDialogOpen = isControlled ? (onOpenChange || (() => { })) : setInternalOpen;
 
   const [loading, setLoading] = useState(false);
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
@@ -99,7 +99,7 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
       setCampaignsLoading(true);
       const data = await campaignsApi.list({ status: "ACTIVE" });
       setCampaigns(data);
-      
+
       // Auto-select first campaign and its first stage
       if (data.length > 0) {
         // We'll set the stage after pipelines are loaded
@@ -137,7 +137,7 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
   const resetForm = () => {
     const firstCampaign = campaigns[0];
     const firstPipeline = firstCampaign ? pipelines.find(p => p.id === firstCampaign.pipelineId) : null;
-    
+
     setFormData({
       firstName: "",
       lastName: "",
@@ -311,7 +311,7 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
 
           <div className="grid grid-cols-2 gap-4">
             <div className="space-y-2">
-              <Label htmlFor="budgetMin">Min Budget ($)</Label>
+              <Label htmlFor="budgetMin">Min Budget (₹)</Label>
               <Input
                 id="budgetMin"
                 type="number"
@@ -324,7 +324,7 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="budgetMax">Max Budget ($)</Label>
+              <Label htmlFor="budgetMax">Max Budget (₹)</Label>
               <Input
                 id="budgetMax"
                 type="number"
@@ -347,8 +347,8 @@ export function AddLeadDialog({ open, onOpenChange, onLeadAdded, children }: Add
                 onValueChange={(value) => {
                   const campaign = campaigns.find(c => c.id === value);
                   const pipeline = pipelines.find(p => p.id === campaign?.pipelineId);
-                  setFormData({ 
-                    ...formData, 
+                  setFormData({
+                    ...formData,
                     campaignId: value,
                     currentStageId: pipeline?.stages[0]?.id || "",
                   });

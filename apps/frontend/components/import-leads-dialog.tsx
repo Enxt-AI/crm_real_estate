@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, Fragment } from "react";
 import { toast } from "sonner";
 import { leads, campaigns as campaignsApi, users as usersApi, type Priority } from "@/lib/api";
 import { Button } from "@/components/ui/button";
@@ -74,15 +74,18 @@ export function ImportLeadsDialog({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = open !== undefined;
   const dialogOpen = isControlled ? open : internalOpen;
-  const setDialogOpen = isControlled ? (onOpenChange || (() => {})) : setInternalOpen;
+  const setDialogOpen = isControlled ? (onOpenChange || (() => { })) : setInternalOpen;
 
   const [step, setStep] = useState<ImportStep>("upload");
   const [isLoading, setIsLoading] = useState(false);
 
   // Upload step
-  const [sourceType, setSourceType] = useState<"FILE" | "GOOGLE_SHEETS_URL">("FILE");
+  const [sourceType, setSourceType] = useState<"FILE" | "GOOGLE_SHEETS_URL" | "GOOGLE_DRIVE_FILE">("FILE");
   const [file, setFile] = useState<File | null>(null);
   const [googleSheetsUrl, setGoogleSheetsUrl] = useState("");
+  const [driveFileId, setDriveFileId] = useState("");
+  const [driveFiles, setDriveFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
+  const [driveConnected, setDriveConnected] = useState<boolean | null>(null);
 
   // Parsed data
   const [headers, setHeaders] = useState<string[]>([]);
@@ -105,6 +108,42 @@ export function ImportLeadsDialog({
 
   // Results
   const [importResults, setImportResults] = useState<any>(null);
+
+  useEffect(() => {
+    if (sourceType === "GOOGLE_DRIVE_FILE" && driveConnected === null) {
+      checkDriveStatus();
+    } else if (sourceType === "GOOGLE_SHEETS_URL" && !googleSheetsUrl) {
+      checkSheetsStatus();
+    }
+  }, [sourceType, driveConnected]);
+
+  const checkSheetsStatus = async () => {
+    try {
+      const { integrations } = await import("@/lib/api");
+      const statusData = await integrations.getGoogleSheetsStatus();
+      if (statusData.defaultSheetsUrl) {
+        setGoogleSheetsUrl(statusData.defaultSheetsUrl);
+      }
+    } catch (e) {
+      // ignore
+    }
+  };
+
+  const checkDriveStatus = async () => {
+    try {
+      const { integrations } = await import("@/lib/api");
+      const statusData = await integrations.getGoogleDriveStatus();
+      setDriveConnected(statusData.connected);
+      if (statusData.connected) {
+        const fileData = await integrations.getGoogleDriveFiles();
+        if (fileData.files) {
+          setDriveFiles(fileData.files);
+        }
+      }
+    } catch (e) {
+      setDriveConnected(false);
+    }
+  };
 
   // Load campaigns and users when dialog opens
   useEffect(() => {
@@ -240,12 +279,18 @@ export function ImportLeadsDialog({
       return;
     }
 
+    if (sourceType === "GOOGLE_DRIVE_FILE" && !driveFileId) {
+      toast.error("Please select a file from Google Drive");
+      return;
+    }
+
     setIsLoading(true);
     try {
       const result = await leads.parseImport({
         sourceType,
         file: sourceType === "FILE" ? file! : undefined,
         url: sourceType === "GOOGLE_SHEETS_URL" ? googleSheetsUrl : undefined,
+        driveFileId: sourceType === "GOOGLE_DRIVE_FILE" ? driveFileId : undefined,
       });
 
       setHeaders(result.headers);
@@ -330,7 +375,7 @@ export function ImportLeadsDialog({
       setImportResults(result);
       setStep("results");
       toast.success(`Imported ${result.summary.successful} leads successfully`);
-      
+
       if (result.summary.successful > 0) {
         onLeadsImported?.();
       }
@@ -346,6 +391,7 @@ export function ImportLeadsDialog({
     setStep("upload");
     setFile(null);
     setGoogleSheetsUrl("");
+    setDriveFileId("");
     setHeaders([]);
     setPreviewData([]);
     setColumnMappings([]);
@@ -372,19 +418,36 @@ export function ImportLeadsDialog({
 
         <div className="space-y-6 py-4">
           {/* Progress indicator */}
-          <div className="flex items-center justify-between">
-            {["upload", "configure", "mapping", "results"].map((s, idx) => (
-              <div key={s} className="flex items-center">
-                <div className={`flex h-8 w-8 items-center justify-center rounded-full ${
-                  step === s ? "bg-blue-600 text-white" :
-                  ["upload", "configure", "mapping"].indexOf(step) > idx ? "bg-green-600 text-white" :
-                  "bg-neutral-200 text-neutral-600"
-                }`}>
-                  {idx + 1}
-                </div>
-                {idx < 3 && <div className="mx-2 h-0.5 w-12 bg-neutral-200" />}
-              </div>
-            ))}
+          <div className="flex items-center w-full px-2 mb-8">
+            {[
+              { id: "upload", label: "Select Source" },
+              { id: "configure", label: "Configuration" },
+              { id: "mapping", label: "Map Columns" }
+            ].map((s, idx, arr) => {
+              const isActive = step === s.id || (step === "results" && idx === 2);
+              const isPast = ["upload", "configure", "mapping"].indexOf(step) > idx || step === "results";
+
+              return (
+                <Fragment key={s.id}>
+                  <div className="flex flex-col items-center relative">
+                    <div className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-semibold transition-colors ${isActive ? "bg-blue-600 text-white ring-4 ring-blue-100" :
+                      isPast ? "bg-green-600 text-white" :
+                        "bg-neutral-200 text-neutral-600"
+                      }`}>
+                      {idx + 1}
+                    </div>
+                    <span className={`text-xs font-medium absolute top-10 whitespace-nowrap ${isActive || isPast ? "text-neutral-900" : "text-neutral-500"
+                      }`}>
+                      {s.label}
+                    </span>
+                  </div>
+                  {idx < arr.length - 1 && (
+                    <div className={`flex-1 h-1 mx-4 rounded transition-colors ${isPast ? "bg-green-600" : "bg-neutral-200"
+                      }`} />
+                  )}
+                </Fragment>
+              );
+            })}
           </div>
 
           {/* Step 1: Upload */}
@@ -399,6 +462,7 @@ export function ImportLeadsDialog({
                   <SelectContent>
                     <SelectItem value="FILE">Upload CSV/Excel File</SelectItem>
                     <SelectItem value="GOOGLE_SHEETS_URL">Google Sheets URL</SelectItem>
+                    <SelectItem value="GOOGLE_DRIVE_FILE">Upload from Google Drive</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -414,7 +478,7 @@ export function ImportLeadsDialog({
                   />
                   {file && <p className="text-sm text-neutral-600">Selected: {file.name}</p>}
                 </div>
-              ) : (
+              ) : sourceType === "GOOGLE_SHEETS_URL" ? (
                 <div key="google-sheets" className="space-y-2">
                   <Label htmlFor="url">Google Sheets URL</Label>
                   <Input
@@ -424,9 +488,39 @@ export function ImportLeadsDialog({
                     onChange={(e) => setGoogleSheetsUrl(e.target.value || "")}
                     placeholder="https://docs.google.com/spreadsheets/d/..."
                   />
-                  <p className="text-xs text-neutral-500">
-                    Make sure the sheet is publicly accessible or shared with the service account
-                  </p>
+                  <div className="bg-amber-50 text-amber-800 p-3 rounded-md text-sm border border-amber-200 mt-2">
+                    <p className="font-medium mb-1">⚠️ Important Requirement</p>
+                    <p>The Google Sheet must be accessible to our servers. Please click the <strong>Share</strong> button in Google Sheets and set General access to <strong>"Anyone with the link"</strong>.</p>
+                  </div>
+                </div>
+              ) : (
+                <div key="google-drive" className="space-y-2">
+                  <Label>Select Google Drive File</Label>
+                  {driveConnected === null ? (
+                    <p className="text-sm text-neutral-500">Checking Google Drive connection...</p>
+                  ) : driveConnected === false ? (
+                    <div className="bg-amber-50 text-amber-800 p-3 rounded-md text-sm border border-amber-200">
+                      <p>Google Drive is not connected or permissions are missing.</p>
+                      <a href="/dashboard/integrations/google/drive" target="_blank" className="text-blue-600 font-medium hover:underline mt-2 inline-block">
+                        Connect Google Drive →
+                      </a>
+                    </div>
+                  ) : driveFiles.length === 0 ? (
+                    <p className="text-sm text-neutral-500">No compatible files (Spreadsheets, CSV, Excel) found in your Google Drive.</p>
+                  ) : (
+                    <Select value={driveFileId} onValueChange={setDriveFileId}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a spreadsheet or CSV file" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        {driveFiles.map(f => (
+                          <SelectItem key={f.id} value={f.id}>
+                            {f.name}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  )}
                 </div>
               )}
 
@@ -589,7 +683,7 @@ export function ImportLeadsDialog({
                       // Determine which transforms are available based on field type
                       const getAvailableTransforms = () => {
                         if (!fieldType || shouldHideTransform) return [];
-                        
+
                         switch (fieldType) {
                           case "text":
                             return ["NONE", "UPPERCASE", "LOWERCASE", "TRIM"];
@@ -642,12 +736,12 @@ export function ImportLeadsDialog({
                                   {availableTransforms.map(transform => (
                                     <SelectItem key={transform} value={transform}>
                                       {transform === "NONE" ? "None" :
-                                       transform === "UPPERCASE" ? "Uppercase" :
-                                       transform === "LOWERCASE" ? "Lowercase" :
-                                       transform === "TRIM" ? "Trim" :
-                                       transform === "SPLIT_COMMA" ? "Split by Comma" :
-                                       transform === "PARSE_NUMBER" ? "Parse Number" :
-                                       transform === "PARSE_DATE" ? "Parse Date" : transform}
+                                        transform === "UPPERCASE" ? "Uppercase" :
+                                          transform === "LOWERCASE" ? "Lowercase" :
+                                            transform === "TRIM" ? "Trim" :
+                                              transform === "SPLIT_COMMA" ? "Split by Comma" :
+                                                transform === "PARSE_NUMBER" ? "Parse Number" :
+                                                  transform === "PARSE_DATE" ? "Parse Date" : transform}
                                     </SelectItem>
                                   ))}
                                 </SelectContent>
@@ -702,7 +796,7 @@ export function ImportLeadsDialog({
                 <p className="text-sm text-blue-600">Total Processed</p>
                 <p className="text-2xl font-bold text-blue-900">{importResults.summary.totalRows}</p>
               </div>
-              
+
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className="rounded-md bg-green-50 p-4">
                   <p className="text-sm text-green-600">Successful</p>

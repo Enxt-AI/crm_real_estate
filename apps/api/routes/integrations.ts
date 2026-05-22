@@ -25,14 +25,35 @@ router.get("/google-sheets/status", authenticate, async (req: Request, res: Resp
   try {
     const user = await prisma.user.findUnique({
       where: { id: req.user!.userId },
-      select: { googleRefreshToken: true, googleSheetsSynced: true },
+      select: { googleRefreshToken: true, googleSheetsSynced: true, googleSheetsUrl: true },
     });
 
-    res.json({ 
-      connected: !!(user?.googleRefreshToken && user?.googleSheetsSynced) 
+    res.json({
+      connected: !!(user?.googleRefreshToken && user?.googleSheetsSynced),
+      defaultSheetsUrl: user?.googleSheetsUrl || null,
     });
   } catch (error) {
     console.error("Error checking sheets status:", error);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /integrations/google-sheets/config - Save default Google Sheets URL
+router.post("/google-sheets/config", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { url } = req.body;
+    if (!url) {
+      return res.status(400).json({ error: "Missing Google Sheets URL" });
+    }
+
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { googleSheetsUrl: url },
+    });
+
+    res.json({ success: true, defaultSheetsUrl: url });
+  } catch (error) {
+    console.error("Error saving sheets config:", error);
     res.status(500).json({ error: "Internal server error" });
   }
 });
@@ -56,9 +77,9 @@ router.get("/google-sheets/headers", authenticate, async (req: Request, res: Res
     }
 
     res.json({ headers: rows[0] });
-  } catch (error) {
+  } catch (error: any) {
     console.error("Error fetching sheet headers:", error);
-    res.status(500).json({ error: "Internal server error" });
+    res.status(400).json({ error: error.message || "Failed to fetch headers. Please check permissions and the range." });
   }
 });
 
@@ -92,6 +113,7 @@ router.post("/google-sheets/sync", authenticate, async (req: Request, res: Respo
         const leadData: any = {
           campaignId,
           currentStageId,
+          assignedToId: userId,
         };
 
         // Map columns to lead fields
@@ -103,8 +125,16 @@ router.post("/google-sheets/sync", authenticate, async (req: Request, res: Respo
         });
 
         // Basic validation for required fields
-        if (!leadData.firstName || !leadData.lastName) {
-          throw new Error("First Name and Last Name are required");
+        if (!leadData.firstName) {
+          throw new Error("First Name is required");
+        }
+        if (!leadData.email && !leadData.mobile) {
+          throw new Error("Either Email or Mobile is required");
+        }
+
+        // Default last name
+        if (!leadData.lastName) {
+          leadData.lastName = "";
         }
 
         // Upsert based on email or mobile
@@ -158,16 +188,23 @@ router.post("/google-sheets/sync", authenticate, async (req: Request, res: Respo
   }
 });
 
+function extractFormId(urlOrId: string): string {
+  if (!urlOrId) return "";
+  const match = urlOrId.match(/\/d\/([a-zA-Z0-9-_]+)/);
+  return match ? match[1] : urlOrId;
+}
+
 // GET /integrations/google-forms/questions - Fetch questions from a Google Form
 router.get("/google-forms/questions", authenticate, async (req: Request, res: Response) => {
   try {
-    const { formId } = req.query as { formId: string };
+    const { formId: rawFormId } = req.query as { formId: string };
 
-    if (!formId) {
-      res.status(400).json({ error: "Missing formId" });
+    if (!rawFormId) {
+      res.status(400).json({ error: "Missing formId or form URL" });
       return;
     }
 
+    const formId = extractFormId(rawFormId);
     const userId = req.user!.userId;
     const questions = await getFormQuestions(userId, formId);
 
@@ -186,13 +223,14 @@ router.get("/google-forms/questions", authenticate, async (req: Request, res: Re
 // POST /integrations/google-forms/sync - Sync leads from a Google Form
 router.post("/google-forms/sync", authenticate, async (req: Request, res: Response) => {
   try {
-    const { formId, campaignId, currentStageId, mapping } = req.body as SyncRequest;
+    const { formId: rawFormId, campaignId, currentStageId, mapping } = req.body as SyncRequest;
 
-    if (!formId || !campaignId || !currentStageId || !mapping) {
+    if (!rawFormId || !campaignId || !currentStageId || !mapping) {
       res.status(400).json({ error: "Missing required parameters for sync" });
       return;
     }
 
+    const formId = extractFormId(rawFormId);
     const userId = req.user!.userId;
     const responses = await getFormResponses(userId, formId);
 
@@ -211,6 +249,7 @@ router.post("/google-forms/sync", authenticate, async (req: Request, res: Respon
         const leadData: any = {
           campaignId,
           currentStageId,
+          assignedToId: userId,
         };
 
         const answers = response.answers || {};
@@ -224,8 +263,16 @@ router.post("/google-forms/sync", authenticate, async (req: Request, res: Respon
         });
 
         // Basic validation
-        if (!leadData.firstName || !leadData.lastName) {
-          throw new Error("First Name and Last Name are required");
+        if (!leadData.firstName) {
+          throw new Error("First Name is required");
+        }
+        if (!leadData.email && !leadData.mobile) {
+          throw new Error("Either Email or Mobile is required");
+        }
+
+        // Default last name
+        if (!leadData.lastName) {
+          leadData.lastName = "";
         }
 
         // Upsert based on email or mobile
@@ -278,13 +325,49 @@ router.post("/google-forms/sync", authenticate, async (req: Request, res: Respon
   }
 });
 
+// GET /integrations/google-drive/status - Check if Google Drive is connected
+router.get("/google-drive/status", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      select: { googleRefreshToken: true, googleDriveFolderId: true },
+    });
+
+    if (!user?.googleRefreshToken) {
+      res.json({ connected: false, error: "No refresh token found" });
+      return;
+    }
+
+    // Try fetching folders to verify Drive API is enabled and accessible
+    try {
+      const { getDriveClient } = await import("../lib/google-drive");
+      const drive = await getDriveClient(req.user!.userId);
+      if (!drive) {
+        res.json({ connected: false });
+        return;
+      }
+      await drive.files.list({ pageSize: 1, fields: "files(id)" });
+      res.json({
+        connected: true,
+        defaultFolderId: user.googleDriveFolderId
+      });
+    } catch (error: any) {
+      res.json({ connected: false, error: error.message });
+    }
+  } catch (error: any) {
+    console.error("Error checking drive status:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+});
+
 // GET /integrations/google-drive/folders - Fetch folders from Google Drive
 router.get("/google-drive/folders", authenticate, async (req: Request, res: Response) => {
   try {
     const userId = req.user!.userId;
     const folders = await getDriveFolders(userId);
 
-    if (!folders) {
+    if (folders === null) {
       res.status(404).json({ error: "No folders found or Google Drive not connected" });
       return;
     }
@@ -296,18 +379,61 @@ router.get("/google-drive/folders", authenticate, async (req: Request, res: Resp
   }
 });
 
+// GET /integrations/google-drive/files - Fetch spreadsheet/CSV files from Google Drive
+router.get("/google-drive/files", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { getDriveSpreadsheets } = await import("../lib/google-drive");
+    const files = await getDriveSpreadsheets(userId);
+
+    if (files === null) {
+      res.status(404).json({ error: "No files found or Google Drive not connected" });
+      return;
+    }
+
+    res.json({ files });
+  } catch (error: any) {
+    console.error("Error fetching drive files:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+});
+
+// GET /integrations/google-drive/files/:folderId - Fetch files from a specific folder
+router.get("/google-drive/files/:folderId", authenticate, async (req: Request, res: Response) => {
+  try {
+    const userId = req.user!.userId;
+    const { folderId } = req.params;
+    const { getDriveSpreadsheets } = await import("../lib/google-drive");
+    const files = await getDriveSpreadsheets(userId, folderId);
+
+    if (files === null) {
+      res.status(404).json({ error: "No files found or Google Drive not connected" });
+      return;
+    }
+
+    res.json({ files });
+  } catch (error: any) {
+    console.error("Error fetching drive files by folder:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
+  }
+});
+
 // POST /integrations/google-drive/config - Save default sync folder
 router.post("/google-drive/config", authenticate, async (req: Request, res: Response) => {
   try {
     const { folderId } = req.body;
+    const userId = req.user!.userId;
 
     if (!folderId) {
       res.status(400).json({ error: "Missing folderId" });
       return;
     }
 
-    // In a real application, you would save this to the User or Integration schema
-    // For now, we simulate success
+    await prisma.user.update({
+      where: { id: userId },
+      data: { googleDriveFolderId: folderId },
+    });
+
     res.json({
       message: "Google Drive folder configured successfully",
       folderId,
@@ -315,6 +441,117 @@ router.post("/google-drive/config", authenticate, async (req: Request, res: Resp
   } catch (error) {
     console.error("Google Drive config error:", error);
     res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// POST /integrations/google-drive/import - Import leads from a Drive file
+router.post("/google-drive/import", authenticate, async (req: Request, res: Response) => {
+  try {
+    const { campaignId, stageId, fileId } = req.body;
+    const userId = req.user!.userId;
+
+    if (!campaignId || !stageId || !fileId) {
+      res.status(400).json({ error: "Missing campaignId, stageId or fileId" });
+      return;
+    }
+
+    const campaign = await prisma.campaign.findUnique({
+      where: { id: campaignId },
+      select: { id: true, createdById: true },
+    });
+
+    if (!campaign) {
+      res.status(404).json({ error: "Campaign not found" });
+      return;
+    }
+
+    const { downloadDriveFile } = await import("../lib/google-drive");
+    const fileBuffer = await downloadDriveFile(userId, fileId);
+
+    if (!fileBuffer) {
+      res.status(404).json({ error: "Could not download file from Google Drive" });
+      return;
+    }
+
+    const xlsx = require("xlsx");
+    const workbook = xlsx.read(fileBuffer, { type: "buffer" });
+    const firstSheetName = workbook.SheetNames[0];
+    const worksheet = workbook.Sheets[firstSheetName];
+    const data: any[] = xlsx.utils.sheet_to_json(worksheet);
+
+    let importedCount = 0;
+    let updatedCount = 0;
+    const errors: { row: number; error: string }[] = [];
+
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      try {
+        const firstName = row["First Name"] || row["firstName"] || row["first_name"];
+        const email = row["Email"] || row["email"];
+        const mobile = row["Mobile"] || row["mobile"] || row["Phone"] || row["phone"];
+
+        if (!firstName) {
+          throw new Error("Missing First Name");
+        }
+        if (!email && !mobile) {
+          throw new Error("Missing Email and Mobile. At least one is required.");
+        }
+
+        const leadData: any = {
+          campaignId,
+          currentStageId: stageId,
+          assignedToId: campaign.createdById,
+          firstName: String(firstName),
+          lastName: row["Last Name"] ? String(row["Last Name"]) : "",
+          email: email ? String(email) : null,
+          mobile: mobile ? String(mobile) : null,
+          alternatePhone: row["Alternate Phone"] ? String(row["Alternate Phone"]) : null,
+          leadType: row["Lead Type"] || "BUYER",
+          budgetMin: row["Budget Min"] ? parseFloat(row["Budget Min"]) : null,
+          budgetMax: row["Budget Max"] ? parseFloat(row["Budget Max"]) : null,
+        };
+
+        const identifier = leadData.email || leadData.mobile;
+        let lead;
+
+        if (identifier) {
+          lead = await prisma.lead.findFirst({
+            where: {
+              campaignId,
+              OR: [
+                { email: leadData.email || undefined },
+                { mobile: leadData.mobile || undefined },
+              ],
+            },
+          });
+        }
+
+        if (lead) {
+          await prisma.lead.update({
+            where: { id: lead.id },
+            data: leadData,
+          });
+          updatedCount++;
+        } else {
+          await prisma.lead.create({
+            data: leadData,
+          });
+          importedCount++;
+        }
+      } catch (error: any) {
+        errors.push({ row: i + 2, error: error.message });
+      }
+    }
+
+    res.json({
+      message: "Import complete",
+      imported: importedCount,
+      updated: updatedCount,
+      errors: errors.length > 0 ? errors : undefined,
+    });
+  } catch (error: any) {
+    console.error("Error importing drive file:", error);
+    res.status(500).json({ error: "Internal server error", details: error.message });
   }
 });
 

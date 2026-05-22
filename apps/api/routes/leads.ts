@@ -39,12 +39,12 @@ const upload = multer({
 // Helper to check campaign access
 const canAccessCampaign = async (campaignId: string, userId: string, userRole: string) => {
   if (userRole === "ADMIN" || userRole === "MANAGER") return true;
-  
+
   const campaign = await prisma.campaign.findUnique({
     where: { id: campaignId },
     select: { assignedToIds: true },
   });
-  
+
   return campaign && campaign.assignedToIds.includes(userId);
 };
 
@@ -81,7 +81,7 @@ router.get("/", authenticate, async (req, res) => {
       });
       const assignedIds = assignedCampaigns.map((c: { id: string }) => c.id);
       console.log("Assigned campaigns:", assignedIds);
-      
+
       where.OR = [
         { campaignId: { in: assignedIds } },
         { assignedToId: userId }
@@ -179,7 +179,7 @@ router.get("/stats", authenticate, async (req, res) => {
         select: { id: true },
       });
       const assignedIds = assignedCampaigns.map((c: { id: string }) => c.id);
-      
+
       where.OR = [
         { campaignId: { in: assignedIds } },
         { assignedToId: userId }
@@ -501,7 +501,7 @@ router.put("/:id", authenticate, async (req, res) => {
         const currentStage = await prisma.pipelineStage.findUnique({
           where: { id: existingLead.currentStageId },
         });
-        
+
         await prisma.interaction.create({
           data: {
             lead: { connect: { id } },
@@ -553,7 +553,7 @@ router.put("/:id", authenticate, async (req, res) => {
     // Create or update follow-up task if nextFollowUpAt is set or changed
     if (validatedData.nextFollowUpAt) {
       const nextFollowUpDate = new Date(validatedData.nextFollowUpAt);
-      
+
       // Check if there's an existing follow-up task for this lead
       const existingTask = await prisma.task.findFirst({
         where: {
@@ -877,13 +877,23 @@ router.delete("/:id", authenticate, requireRole("ADMIN"), async (req, res) => {
 // Parse spreadsheet or Google Sheets URL
 router.post("/import/parse", authenticate, upload.single("file"), async (req, res) => {
   try {
-    const { sourceType, url } = req.body;
+    const { sourceType, url, driveFileId } = req.body;
     let workbook: XLSX.WorkBook;
 
-    if (sourceType === "GOOGLE_SHEETS_URL" && url) {
+    if (sourceType === "GOOGLE_DRIVE_FILE" && driveFileId) {
+      const { downloadDriveFile } = await import("../lib/google-drive");
+      const userId = (req as any).user.userId;
+      const buffer = await downloadDriveFile(userId, driveFileId);
+
+      if (!buffer) {
+        return res.status(400).json({ error: "Failed to download file from Google Drive. Please ensure you have granted Drive permissions." });
+      }
+
+      workbook = XLSX.read(buffer, { type: "buffer" });
+    } else if (sourceType === "GOOGLE_SHEETS_URL" && url) {
       // Convert Google Sheets URL to export format
       let exportUrl = url;
-      
+
       // Handle different Google Sheets URL formats
       if (url.includes("/edit")) {
         exportUrl = url.replace(/\/edit.*/, "/export?format=xlsx");
@@ -938,14 +948,26 @@ router.post("/import/parse", authenticate, upload.single("file"), async (req, re
     });
   } catch (error: any) {
     console.error("Error parsing spreadsheet:", error);
-    
-    if (error.message?.includes("ENOTFOUND") || error.message?.includes("timeout")) {
-      return res.status(400).json({ error: "Failed to fetch Google Sheets. Please check the URL and sharing permissions." });
+
+    if (error.isAxiosError) {
+      if (error.response?.status === 404 || error.response?.status === 401 || error.response?.status === 403) {
+        return res.status(400).json({
+          error: "Could not access the Google Sheet. Please make sure the link is set to 'Anyone with the link can view'."
+        });
+      }
+      return res.status(400).json({
+        error: "Failed to fetch Google Sheets.",
+        details: error.message
+      });
     }
-    
-    res.status(500).json({ 
-      error: "Failed to parse spreadsheet", 
-      details: error.message 
+
+    if (error.message?.includes("ENOTFOUND") || error.message?.includes("timeout")) {
+      return res.status(400).json({ error: "Failed to fetch Google Sheets. Please check your internet connection and the URL." });
+    }
+
+    res.status(500).json({
+      error: "Failed to parse spreadsheet",
+      details: error.message
     });
   }
 });
@@ -1078,6 +1100,12 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
           const date = new Date(strValue);
           return isNaN(date.getTime()) ? null : date.toISOString();
         default:
+          // Excel sheet_to_json often parses numeric strings (like phone numbers) as numbers.
+          // Convert them back to strings unless the target field is actually a number.
+          const numberFields = ["budgetMin", "budgetMax", "bedroomsMin", "bathroomsMin", "squareFeetMin", "preApprovalAmount", "score"];
+          if (typeof value === "number" && !numberFields.includes(fieldName)) {
+            return strValue;
+          }
           return value;
       }
     };
@@ -1089,7 +1117,11 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (!row) continue;
-      
+
+      // Check if the row is entirely empty (all cells are blank/whitespace)
+      const isRowEmpty = Object.values(row).every(v => !v || String(v).trim() === "");
+      if (isRowEmpty) continue;
+
       const rowNumber = i + 1;
 
       try {
@@ -1108,18 +1140,43 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
 
           if (transformedValue !== null && transformedValue !== undefined) {
             leadData[mapping.targetField] = transformedValue;
+
+            // Protect Enum fields from crashing Prisma if user maps a random string/number
+            const validEnums: Record<string, string[]> = {
+              leadType: ["BUYER", "SELLER", "INVESTOR", "RENTER", "BUYER_SELLER"],
+              priority: ["LOW", "MEDIUM", "HIGH", "URGENT"],
+              moveInTimeline: ["ASAP", "ONE_TO_THREE_MONTHS", "THREE_TO_SIX_MONTHS", "SIX_TO_TWELVE_MONTHS", "OVER_A_YEAR", "JUST_BROWSING"],
+              currentHousingStatus: ["RENTING", "OWNS_HOME", "LIVING_WITH_FAMILY", "OTHER"],
+              preApprovalStatus: ["NOT_STARTED", "IN_PROGRESS", "PRE_QUALIFIED", "PRE_APPROVED", "NOT_NEEDED"],
+            };
+
+            if (validEnums[mapping.targetField] && !validEnums[mapping.targetField].includes(String(transformedValue))) {
+              delete leadData[mapping.targetField];
+            }
           }
         }
 
-        // Ensure required fields
-        if (!leadData.firstName || !leadData.lastName) {
+        // Ensure required fields (First name, and either Email or Mobile)
+        if (!leadData.firstName) {
           results.push({
             row: rowNumber,
             status: "error",
-            message: "Missing required fields: firstName and lastName",
+            message: "Missing required field: First Name",
           });
           continue;
         }
+
+        if (!leadData.email && !leadData.mobile) {
+          results.push({
+            row: rowNumber,
+            status: "error",
+            message: "Missing required field: Provide either an Email or a Mobile Number",
+          });
+          continue;
+        }
+
+        // Fill missing last name with empty string for Prisma
+        if (!leadData.lastName) leadData.lastName = "";
 
         // Check for duplicates
         if (duplicateHandling !== "CREATE_NEW" && (leadData.email || leadData.mobile)) {
@@ -1159,7 +1216,7 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
                 // Create or update follow-up task if nextFollowUpAt is set
                 if (leadData.nextFollowUpAt) {
                   const nextFollowUpDate = new Date(leadData.nextFollowUpAt);
-                  
+
                   // Check if there's an existing follow-up task for this lead
                   const existingTask = await prisma.task.findFirst({
                     where: {
@@ -1248,7 +1305,7 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
 
       } catch (error: any) {
         console.error(`Error processing row ${rowNumber}:`, error);
-        
+
         let errorMessage = "Unknown error";
         if (error.errors && Array.isArray(error.errors)) {
           // Zod validation error
@@ -1281,17 +1338,17 @@ router.post("/import/bulk", authenticate, upload.single("file"), async (req, res
 
   } catch (error: any) {
     console.error("Error during bulk import:", error);
-    
+
     if (error.errors && Array.isArray(error.errors)) {
-      return res.status(400).json({ 
-        error: "Validation error", 
+      return res.status(400).json({
+        error: "Validation error",
         details: error.errors.map((e: any) => e.message).join(", ")
       });
     }
-    
-    res.status(500).json({ 
-      error: "Failed to import leads", 
-      details: error.message 
+
+    res.status(500).json({
+      error: "Failed to import leads",
+      details: error.message
     });
   }
 });

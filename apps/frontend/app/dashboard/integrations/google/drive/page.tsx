@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { toast } from "sonner";
@@ -12,23 +13,42 @@ export default function GoogleDrivePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
   const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedFolder, setSelectedFolder] = useState<string>("");
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function init() {
       setIsLoading(true);
       try {
-        const statusData = await integrations.getGoogleSheetsStatus();
+        const statusData = await integrations.getGoogleDriveStatus();
         setIsConnected(statusData.connected);
+        if (statusData.error) {
+          setErrorMessage(statusData.error);
+        } else {
+          setErrorMessage(null);
+        }
 
         if (statusData.connected) {
-          const driveData = await integrations.getGoogleDriveFolders();
-          if (driveData.folders) {
-            setFolders(driveData.folders);
+          setIsConnected(true);
+
+          if (statusData.defaultFolderId) {
+            setSelectedFolder(statusData.defaultFolderId);
+          }
+
+          try {
+            const driveData = await integrations.getGoogleDriveFolders();
+            if (driveData.folders) {
+              setFolders(driveData.folders);
+            }
+          } catch (e) {
+            // Folders might fail if API is disabled or scopes missing, despite statusData.connected being true from other checks
+            toast.error("Could not fetch folders. Please verify Google Drive API is enabled and reconnect.");
+            setIsConnected(false);
           }
         }
       } catch (error) {
-        toast.error("Failed to initialize Google Drive integration");
+        toast.error("Failed to fetch Google Drive status");
       } finally {
         setIsLoading(false);
       }
@@ -36,10 +56,15 @@ export default function GoogleDrivePage() {
     init();
   }, []);
 
+  const filteredFolders = folders.filter(f =>
+    f.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   async function handleConnect() {
     setIsLoading(true);
     try {
-      const data = await auth.getGoogleAuthUrl();
+      // Pass returnTo parameter so the OAuth callback redirects back to this page
+      const data = await auth.getGoogleAuthUrl("/dashboard/integrations/google/drive");
       if (data.authUrl) {
         window.location.href = data.authUrl;
       } else {
@@ -70,7 +95,12 @@ export default function GoogleDrivePage() {
         <p className="mt-1 text-sm text-neutral-500">Connect Google Drive to store and sync your CRM documents.</p>
       </div>
 
-      {isConnected === false ? (
+      {isConnected === null ? (
+        <div className="flex min-h-[40vh] flex-col items-center justify-center space-y-4">
+          <div className="h-8 w-8 animate-spin rounded-full border-4 border-neutral-200 border-t-neutral-900" />
+          <p className="text-sm text-neutral-500">Checking connection status...</p>
+        </div>
+      ) : isConnected === false ? (
         <div className="flex min-h-[60vh] items-center justify-center">
           <Card className="flex flex-col items-center justify-center py-12 text-center max-w-lg mx-auto w-full">
             <CardHeader className="flex flex-col items-center justify-center text-center space-y-4 w-full">
@@ -81,6 +111,12 @@ export default function GoogleDrivePage() {
               <p className="text-sm text-neutral-500 text-center leading-relaxed w-full">
                 To sync documents, you need to authorize access to your Google Drive.
               </p>
+              {errorMessage && (
+                <div className="bg-red-50 text-red-600 p-3 rounded-md text-sm w-full text-center">
+                  <p className="font-semibold">Connection Error:</p>
+                  <p>{errorMessage}</p>
+                </div>
+              )}
             </CardContent>
             <CardFooter className="flex justify-center w-full mt-6">
               <Button
@@ -109,14 +145,32 @@ export default function GoogleDrivePage() {
               <div className="space-y-2">
                 <Label>Default Sync Folder</Label>
                 {folders.length > 0 ? (
-                  <Select onValueChange={setSelectedFolder} value={selectedFolder}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a Drive Folder" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {folders.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <>
+                    <Select onValueChange={setSelectedFolder} value={selectedFolder}>
+                      <SelectTrigger>
+                        <SelectValue placeholder="Select a Drive Folder" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <div
+                          className="p-2 sticky top-0 bg-white z-10 border-b"
+                          onKeyDown={(e) => e.stopPropagation()}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <Input
+                            placeholder="Search folders..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                        {filteredFolders.length > 0 ? (
+                          filteredFolders.map(f => <SelectItem key={f.id} value={f.id}>{f.name}</SelectItem>)
+                        ) : (
+                          <div className="p-2 text-sm text-neutral-500 text-center">No folders match your search</div>
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </>
                 ) : (
                   <div className="text-sm text-neutral-500 p-2 border rounded bg-neutral-50">
                     No folders found in your Google Drive. Please create one and refresh the page.

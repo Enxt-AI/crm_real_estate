@@ -542,14 +542,14 @@ export const auth = {
       method: "POST",
     }),
 
-  createUser: (data: { 
-    username: string; 
-    fullName: string; 
-    role: "MANAGER" | "TEAM_LEADER" | "TELE_CALLER" | "FIELD_EXECUTIVE"; 
+  createUser: (data: {
+    username: string;
+    fullName: string;
+    role: "MANAGER" | "TEAM_LEADER" | "TELE_CALLER" | "FIELD_EXECUTIVE";
     email?: string;
     contactNumber?: string;
     employeeId?: string;
-    password?: string 
+    password?: string
   }) =>
     request<{ message: string; user: User; temporaryPassword: string }>("/auth/users", {
       method: "POST",
@@ -566,8 +566,8 @@ export const auth = {
       method: "PATCH",
     }),
 
-  getGoogleAuthUrl: () =>
-    request<{ authUrl: string }>("/auth/google/connect"),
+  getGoogleAuthUrl: (returnTo?: string) =>
+    request<{ authUrl: string }>(`/auth/google/connect${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`),
 };
 
 // ================================
@@ -895,12 +895,14 @@ export const leads = {
     }),
 
   // Import APIs
-  parseImport: async (data: { sourceType: "FILE" | "GOOGLE_SHEETS_URL"; file?: File; url?: string }) => {
+  parseImport: async (data: { sourceType: "FILE" | "GOOGLE_SHEETS_URL" | "GOOGLE_DRIVE_FILE"; file?: File; url?: string; driveFileId?: string }) => {
     const formData = new FormData();
     formData.append("sourceType", data.sourceType);
 
     if (data.sourceType === "GOOGLE_SHEETS_URL" && data.url) {
       formData.append("url", data.url);
+    } else if (data.sourceType === "GOOGLE_DRIVE_FILE" && data.driveFileId) {
+      formData.append("driveFileId", data.driveFileId);
     } else if (data.file) {
       formData.append("file", data.file);
     }
@@ -1358,8 +1360,8 @@ export const googleCalendar = {
   getStatus: () =>
     request<GoogleCalendarStatus>("/auth/google/status"),
 
-  getConnectUrl: () =>
-    request<{ authUrl: string }>("/auth/google/connect"),
+  getConnectUrl: (returnTo?: string) =>
+    request<{ authUrl: string }>(`/auth/google/connect${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`),
 
   disconnect: () =>
     request<{ message: string }>("/auth/google/disconnect", {
@@ -1372,40 +1374,61 @@ export const googleCalendar = {
 // ================================
 
 export const integrations = {
-  getGoogleSheetsStatus: () => 
-    request<{ connected: boolean }>("/integrations/google-sheets/status"),
-  
-  getGoogleSheetsHeaders: (spreadsheetId: string, range: string) => 
+  getGoogleSheetsStatus: () =>
+    request<{ connected: boolean; defaultSheetsUrl?: string | null }>("/integrations/google-sheets/status"),
+
+  saveGoogleSheetsConfig: (url: string) =>
+    request<{ success: boolean; defaultSheetsUrl: string }>("/integrations/google-sheets/config", {
+      method: "POST",
+      body: { url },
+    }),
+
+  getGoogleDriveStatus: () =>
+    request<{ connected: boolean; defaultFolderId?: string; error?: string }>("/integrations/google-drive/status"),
+
+  getGoogleDriveFiles: () =>
+    request<{ files: { id: string; name: string; mimeType: string }[] }>("/integrations/google-drive/files"),
+
+  getGoogleSheetsHeaders: (spreadsheetId: string, range: string) =>
     request<{ headers: string[] }>(`/integrations/google-sheets/headers?spreadsheetId=${spreadsheetId}&range=${encodeURIComponent(range)}`),
-  
+
   syncGoogleSheets: (data: {
     spreadsheetId: string;
     range: string;
     campaignId: string;
     currentStageId: string;
     mapping: Record<string, string>;
-  }) => 
-    request<{ message: string; imported: number; updated: number; errors: any[] }>( "/integrations/google-sheets/sync", {
+  }) =>
+    request<{ message: string; imported: number; updated: number; errors: any[] }>("/integrations/google-sheets/sync", {
       method: "POST",
       body: data,
     }),
 
-  getGoogleFormsQuestions: (formId: string) => 
+  getGoogleFormsQuestions: (formId: string) =>
     request<{ questions: { id: string; title: string }[] }>(`/integrations/google-forms/questions?formId=${formId}`),
-  
+
   syncGoogleForms: (data: {
     formId: string;
     campaignId: string;
     currentStageId: string;
     mapping: Record<string, string>;
-  }) => 
-    request<{ message: string; imported: number; updated: number; errors: any[] }>( "/integrations/google-forms/sync", {
+  }) =>
+    request<{ message: string; imported: number; updated: number; errors: any[] }>("/integrations/google-forms/sync", {
       method: "POST",
       body: data,
     }),
 
   getGoogleDriveFolders: () =>
     request<{ folders: { id: string; name: string }[] }>("/integrations/google-drive/folders"),
+
+  getGoogleDriveFilesByFolder: (folderId: string) =>
+    request<{ files: { id: string; name: string; mimeType: string }[] }>(`/integrations/google-drive/files/${folderId}`),
+
+  importGoogleDriveFile: (data: { campaignId: string; stageId: string; fileId: string }) =>
+    request<{ message: string; imported: number; updated: number; errors: any[] }>("/integrations/google-drive/import", {
+      method: "POST",
+      body: data,
+    }),
 
   saveGoogleDriveConfig: (folderId: string) =>
     request<{ message: string; folderId: string }>("/integrations/google-drive/config", {

@@ -11,9 +11,9 @@ import { auth, pipelines, campaigns, integrations } from "@/lib/api";
 
 const LEAD_FIELDS = [
   { id: "firstName", label: "First Name", required: true },
-  { id: "lastName", label: "Last Name", required: true },
-  { id: "email", label: "Email" },
-  { id: "mobile", label: "Mobile" },
+  { id: "lastName", label: "Last Name" },
+  { id: "email", label: "Email (Required if no mobile)" },
+  { id: "mobile", label: "Mobile (Required if no email)" },
   { id: "alternatePhone", label: "Alternate Phone" },
   { id: "leadType", label: "Lead Type" },
   { id: "budgetMin", label: "Budget Min" },
@@ -28,8 +28,8 @@ export default function GoogleSheetsPage() {
   const [stagesList, setStagesList] = useState<{ id: string; name: string }[]>([]);
 
   const [config, setConfig] = useState({
-    spreadsheetId: "",
-    range: "Sheet1!A1:Z1000",
+    googleSheetsUrl: "",
+    range: "A1:Z1000",
     campaignId: "",
     currentStageId: "",
     mapping: {} as Record<string, string>,
@@ -44,6 +44,9 @@ export default function GoogleSheetsPage() {
         // Check connection status
         const statusData = await integrations.getGoogleSheetsStatus();
         setIsConnected(statusData.connected);
+        if (statusData.defaultSheetsUrl) {
+          setConfig(prev => ({ ...prev, googleSheetsUrl: statusData.defaultSheetsUrl! }));
+        }
 
         // Load dependencies
         const [camps, pipes] = await Promise.all([
@@ -92,10 +95,19 @@ export default function GoogleSheetsPage() {
     }
   }
 
+  function extractSpreadsheetId(url: string) {
+    if (!url) return "";
+    const match = url.match(/\/d\/([a-zA-Z0-9-_]+)/);
+    return match ? match[1] : url; // fallback to assuming they entered the ID directly
+  }
+
   async function fetchHeaders() {
     setIsLoading(true);
     try {
-      const data = await integrations.getGoogleSheetsHeaders(config.spreadsheetId, config.range);
+      const spreadsheetId = extractSpreadsheetId(config.googleSheetsUrl);
+      if (!spreadsheetId) throw new Error("Invalid Google Sheets URL");
+
+      const data = await integrations.getGoogleSheetsHeaders(spreadsheetId, config.range);
       if (data.headers) {
         setHeaders(data.headers);
         toast.success("Headers fetched successfully!");
@@ -112,7 +124,10 @@ export default function GoogleSheetsPage() {
   async function handleSync() {
     setIsLoading(true);
     try {
-      const data = await integrations.syncGoogleSheets(config);
+      const spreadsheetId = extractSpreadsheetId(config.googleSheetsUrl);
+      if (!spreadsheetId) throw new Error("Invalid Google Sheets URL");
+
+      const data = await integrations.syncGoogleSheets({ ...config, spreadsheetId });
       toast.success(`Sync complete: ${data.imported} imported, ${data.updated} updated`);
     } catch (error: any) {
       toast.error(error.message || "Error during sync");
@@ -160,21 +175,30 @@ export default function GoogleSheetsPage() {
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
-                <Label>Spreadsheet ID</Label>
+                <Label>Google Sheets URL</Label>
                 <Input
-                  placeholder="Enter Spreadsheet ID"
-                  value={config.spreadsheetId}
-                  onChange={e => setConfig(prev => ({ ...prev, spreadsheetId: e.target.value }))}
+                  placeholder="https://docs.google.com/spreadsheets/d/..."
+                  value={config.googleSheetsUrl}
+                  onChange={e => setConfig(prev => ({ ...prev, googleSheetsUrl: e.target.value }))}
                 />
+                <Button 
+                  variant="secondary" 
+                  size="sm" 
+                  className="w-full mt-2"
+                  disabled={!config.googleSheetsUrl || isLoading}
+                  onClick={async () => {
+                    try {
+                      await integrations.saveGoogleSheetsConfig(config.googleSheetsUrl);
+                      toast.success("Saved as default Google Sheets URL");
+                    } catch (error) {
+                      toast.error("Failed to save default URL");
+                    }
+                  }}
+                >
+                  Save as Default
+                </Button>
               </div>
-              <div className="space-y-2">
-                <Label>Range</Label>
-                <Input
-                  placeholder="Sheet1!A1:Z1000"
-                  value={config.range}
-                  onChange={e => setConfig(prev => ({ ...prev, range: e.target.value }))}
-                />
-              </div>
+
               <div className="space-y-2">
                 <Label>Target Campaign</Label>
                 <Select onValueChange={handleCampaignChange} value={config.campaignId}>
@@ -204,7 +228,7 @@ export default function GoogleSheetsPage() {
               <Button
                 className="w-full"
                 onClick={fetchHeaders}
-                disabled={isLoading || !config.spreadsheetId}
+                disabled={isLoading || !config.googleSheetsUrl}
               >
                 {isLoading ? "Loading..." : "Fetch Column Headers"}
               </Button>

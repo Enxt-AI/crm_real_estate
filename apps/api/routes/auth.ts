@@ -171,7 +171,7 @@ router.post("/signin", signinLimiter, async (req: Request, res: Response) => {
     const cookieName = getCookieName(req.headers.origin);
     res.cookie(cookieName, token, cookieOptions(req.headers.origin));
 
-  res.json({
+    res.json({
       message: "Signed in successfully",
       user: {
         id: user.id,
@@ -193,14 +193,14 @@ router.post("/signout", authenticate, (req: Request, res: Response) => {
   // Instead of relying on potentially stripped origin headers, 
   // forcefully clear all variations.
   const isSecureEnv = process.env.NODE_ENV === "production" || process.env.HTTPS_ENABLED === "true";
-  
+
   const mobileOptions = {
     httpOnly: true,
     secure: isSecureEnv,
     sameSite: "none" as const,
     path: "/",
   };
-  
+
   const webOptions = {
     httpOnly: true,
     secure: isSecureEnv,
@@ -211,10 +211,10 @@ router.post("/signout", authenticate, (req: Request, res: Response) => {
   // Clear specific mobile token
   res.clearCookie("token_mobile", mobileOptions);
   res.clearCookie("token_mobile", webOptions); // Fallback if it was set weirdly locally
-  
+
   // Clear specific web token
   res.clearCookie("token_web", webOptions);
-  
+
   // Clear legacy tokens
   res.clearCookie("token", mobileOptions);
   res.clearCookie("token", webOptions);
@@ -344,19 +344,19 @@ router.post("/users", authenticate, requireAdmin, async (req: Request, res: Resp
     const plainPassword = password || generateRandomPassword();
     const passwordHash = await hashPassword(plainPassword);
 
-     // Create user
-     const newUser = await prisma.user.create({
-       data: {
-         username,
-         fullName,
-         role,
-         passwordHash,
-         email,
-         contactNumber,
-         employeeId,
-         needsPasswordChange: true, // Force password change on first login
-       },
-       select: {
+    // Create user
+    const newUser = await prisma.user.create({
+      data: {
+        username,
+        fullName,
+        role,
+        passwordHash,
+        email,
+        contactNumber,
+        employeeId,
+        needsPasswordChange: true, // Force password change on first login
+      },
+      select: {
         id: true,
         username: true,
         fullName: true,
@@ -436,7 +436,7 @@ router.patch("/users/:id/toggle-active", authenticate, requireAdmin, async (req:
       },
     });
 
-  res.json({
+    res.json({
       message: `User ${updatedUser.isActive ? "activated" : "deactivated"} successfully`,
       user: updatedUser,
     });
@@ -452,7 +452,7 @@ router.patch("/users/:id/toggle-active", authenticate, requireAdmin, async (req:
 router.get("/google/status", authenticate, async (req: Request, res: Response) => {
   try {
     const { userId } = req.user!;
-    
+
     const user = await prisma.user.findUnique({
       where: { id: userId },
       select: {
@@ -475,12 +475,13 @@ router.get("/google/status", authenticate, async (req: Request, res: Response) =
 router.get("/google/connect", authenticate, async (req: Request, res: Response) => {
   try {
     const { userId } = req.user!;
-    
-    // Create state parameter with user ID for security
-    const state = Buffer.from(JSON.stringify({ userId })).toString("base64");
-    
+    const returnTo = req.query.returnTo as string | undefined;
+
+    // Create state parameter with user ID and returnTo for security
+    const state = Buffer.from(JSON.stringify({ userId, returnTo })).toString("base64");
+
     const authUrl = getAuthUrl(state);
-    
+
     res.json({ authUrl });
   } catch (error) {
     console.error("Google connect error:", error);
@@ -492,10 +493,10 @@ router.get("/google/connect", authenticate, async (req: Request, res: Response) 
 router.get("/google/callback", async (req: Request, res: Response) => {
   try {
     const { code, state, error: oauthError } = req.query;
-    
+
     // Frontend URL for redirecting after OAuth
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    
+
     if (oauthError) {
       console.error("OAuth error:", oauthError);
       res.redirect(`${frontendUrl}/dashboard/meetings?google_error=access_denied`);
@@ -507,11 +508,13 @@ router.get("/google/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    // Decode state to get user ID
+    // Decode state to get user ID and returnTo
     let userId: string;
+    let returnTo: string | undefined;
     try {
       const stateData = JSON.parse(Buffer.from(state as string, "base64").toString());
       userId = stateData.userId;
+      returnTo = stateData.returnTo;
     } catch {
       res.redirect(`${frontendUrl}/dashboard/meetings?google_error=invalid_state`);
       return;
@@ -519,7 +522,7 @@ router.get("/google/callback", async (req: Request, res: Response) => {
 
     // Exchange code for tokens
     const tokens = await getTokensFromCode(code as string);
-    
+
     if (!tokens.refresh_token) {
       res.redirect(`${frontendUrl}/dashboard/meetings?google_error=no_refresh_token`);
       return;
@@ -548,8 +551,12 @@ router.get("/google/callback", async (req: Request, res: Response) => {
       // Don't fail the OAuth flow if sync fails
     }
 
-    // Redirect back to meetings page with success
-    res.redirect(`${frontendUrl}/dashboard/meetings?google_connected=true`);
+    // Redirect back to the requested page or meetings page
+    if (returnTo) {
+      res.redirect(`${frontendUrl}${returnTo}?google_connected=true`);
+    } else {
+      res.redirect(`${frontendUrl}/dashboard/meetings?google_connected=true`);
+    }
   } catch (error) {
     console.error("Google callback error:", error);
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";

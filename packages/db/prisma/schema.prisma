@@ -23,9 +23,11 @@ model User {
   googleCalendarId     String?
   googleCalendarSynced Boolean            @default(false)
   googleRefreshToken   String?
+  googleDriveFolderId  String?
   contactNumber        String?
   employeeId           String?
   googleSheetsSynced   Boolean            @default(false)
+  googleSheetsUrl      String?
   createdCampaigns     Campaign[]         @relation("CampaignCreator")
   createdFolders       Folder[]           @relation("FolderCreator")
   createdInteractions  Interaction[]      @relation("InteractionCreator")

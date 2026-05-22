@@ -46,7 +46,7 @@ export function CreateCampaignDialog({
   const [internalOpen, setInternalOpen] = useState(false);
   const isControlled = open !== undefined;
   const dialogOpen = isControlled ? open : internalOpen;
-  const setDialogOpen = isControlled ? (onOpenChange || (() => {})) : setInternalOpen;
+  const setDialogOpen = isControlled ? (onOpenChange || (() => { })) : setInternalOpen;
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -324,7 +324,7 @@ export function CreateCampaignDialog({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="budget">Budget ($)</Label>
+                <Label htmlFor="budget">Budget (₹)</Label>
                 <Input
                   id="budget"
                   type="number"
@@ -366,8 +366,8 @@ export function CreateCampaignDialog({
                             user.role === "ADMIN"
                               ? "default"
                               : user.role === "MANAGER"
-                              ? "secondary"
-                              : "outline"
+                                ? "secondary"
+                                : "outline"
                           }
                           className="text-xs"
                         >

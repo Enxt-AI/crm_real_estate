@@ -213,8 +213,8 @@ export const updateCampaignSchema = z.object({
 // ================================
 
 export const createLeadSchema = z.object({
-  firstName: z.string().min(1, "First name is required").max(100),
-  lastName: z.string().min(1, "Last name is required").max(100),
+  firstName: z.string().max(100).optional().nullable().or(z.literal("")),
+  lastName: z.string().max(100).optional().nullable().or(z.literal("")),
   email: z.string().email("Invalid email address").optional().nullable().or(z.literal("")),
   mobile: z.string().max(20).optional().nullable(),
   alternatePhone: z.string().max(20).optional().nullable(),

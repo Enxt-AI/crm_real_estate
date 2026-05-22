@@ -79,7 +79,14 @@ export default function TemplateWizardPage() {
       ]
     },
     meeting: { title: "", startTime: "", endTime: "" },
-    leads: { items: [] as { firstName: string; lastName: string; email: string; mobile: string; leadType: string }[], file: null as File | null },
+    leads: { 
+      items: [] as { firstName: string; lastName: string; email: string; mobile: string; leadType: string }[], 
+      file: null as File | null,
+      integrationType: "NONE" as "NONE" | "GOOGLE_SHEETS" | "GOOGLE_FORMS" | "GOOGLE_DRIVE",
+      integrationUrl: "",
+      integrationFolderId: "",
+      integrationFileId: ""
+    },
     workflows: [{ name: "", trigger: "call_connected", action: "change_stage", destinationStageIndex: 1 }],
     document: { name: "", file: null as File | null }
   });
@@ -165,6 +172,38 @@ export default function TemplateWizardPage() {
         }
       }
 
+      // Integration Config (Sheets)
+      if (state.leads.integrationType === "GOOGLE_SHEETS" && state.leads.integrationUrl) {
+        try {
+          await integrations.saveGoogleSheetsConfig(state.leads.integrationUrl);
+        } catch (err) {
+          console.error("Failed to save sheets url:", err);
+        }
+      }
+
+      // Integration Config (Drive)
+      if (state.leads.integrationType === "GOOGLE_DRIVE" && state.leads.integrationFolderId) {
+        try {
+          await integrations.saveGoogleDriveConfig(state.leads.integrationFolderId);
+          if (state.leads.integrationFileId) {
+            toast.loading("Importing leads from Google Drive file...", { id: "template-creation" });
+            const importRes = await integrations.importGoogleDriveFile({
+              campaignId,
+              stageId: firstStageId,
+              fileId: state.leads.integrationFileId
+            });
+            if (importRes.errors && importRes.errors.length > 0) {
+              toast.warning(`Imported ${importRes.imported}, but with ${importRes.errors.length} errors.`);
+            } else {
+              toast.success(`Imported ${importRes.imported} leads successfully.`);
+            }
+          }
+        } catch (err) {
+          console.error("Failed to process drive config/import:", err);
+          toast.error("Failed to import leads from Google Drive file");
+        }
+      }
+
       // Step 5: Create Workflows (if filled)
       if (state.workflows && state.workflows.length > 0) {
         for (const wf of state.workflows) {
@@ -191,16 +230,17 @@ export default function TemplateWizardPage() {
         });
       }
 
-      toast.success("Project Setup Complete! All entities have been created successfully.");
+      toast.success("Project Setup Complete! All entities have been created successfully.", { id: "template-creation" });
       const updatedCampaigns = await campaigns.list();
       setCreatedTemplates(updatedCampaigns);
       setShowWizard(false);
       setCurrentStep(0);
     } catch (error: any) {
       console.error(error);
-      toast.error(error.message || "Failed to create template resources.");
+      toast.error(error.message || "Failed to create template resources.", { id: "template-creation" });
     } finally {
       setIsSubmitting(false);
+      toast.dismiss("template-creation");
     }
   };
 
@@ -422,7 +462,7 @@ function CampaignStep({ state, onChange, usersList }: { state: any, onChange: (v
         />
       </div>
       <div className="space-y-2">
-        <label className="text-sm font-medium text-neutral-700">Budget ($)</label>
+        <label className="text-sm font-medium text-neutral-700">Budget (₹)</label>
         <input
           type="number"
           value={state.budget}
@@ -626,7 +666,37 @@ function MeetingStep({ state, onChange }: { state: any, onChange: (val: any) => 
   );
 }
 
-function LeadsStep({ state, onChange }: { state: { items: any[], file: File | null }, onChange: (val: any) => void }) {
+function LeadsStep({ state, onChange }: { state: any, onChange: (val: any) => void }) {
+  const [folders, setFolders] = useState<{ id: string; name: string }[]>([]);
+  const [loadingFolders, setLoadingFolders] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  
+  const [files, setFiles] = useState<{ id: string; name: string; mimeType: string }[]>([]);
+  const [loadingFiles, setLoadingFiles] = useState(false);
+
+  useEffect(() => {
+    if (state.integrationType === "GOOGLE_DRIVE" && folders.length === 0) {
+      setLoadingFolders(true);
+      integrations.getGoogleDriveFolders()
+        .then(res => setFolders(res.folders || []))
+        .catch(console.error)
+        .finally(() => setLoadingFolders(false));
+    }
+  }, [state.integrationType, folders.length]);
+
+  useEffect(() => {
+    if (state.integrationType === "GOOGLE_DRIVE" && state.integrationFolderId) {
+      setLoadingFiles(true);
+      setFiles([]);
+      integrations.getGoogleDriveFilesByFolder(state.integrationFolderId)
+        .then(res => setFiles(res.files || []))
+        .catch(console.error)
+        .finally(() => setLoadingFiles(false));
+    }
+  }, [state.integrationFolderId]);
+
+  const filteredFolders = folders.filter(f => f.name.toLowerCase().includes(searchQuery.toLowerCase()));
+
   const addLead = () => {
     onChange({ ...state, items: [...state.items, { firstName: "", lastName: "", email: "", mobile: "", leadType: "BUYER" }] });
   };
@@ -648,75 +718,172 @@ function LeadsStep({ state, onChange }: { state: { items: any[], file: File | nu
   };
 
   return (
-    <div className="max-w-4xl space-y-6">
-      <div className="flex justify-between items-center">
-        <p className="text-sm text-neutral-500">Seed your campaign with initial leads (Optional)</p>
-        <Button variant="outline" size="sm" onClick={addLead}><Plus className="w-4 h-4 mr-1" /> Add Manual Lead</Button>
+    <div className="max-w-4xl space-y-8">
+      {/* Manual / CSV Section */}
+      <div className="space-y-4">
+        <div className="flex justify-between items-center">
+          <p className="text-sm font-medium text-neutral-900">1. Initial Leads (Optional)</p>
+          <Button variant="outline" size="sm" onClick={addLead}><Plus className="w-4 h-4 mr-1" /> Add Manual Lead</Button>
+        </div>
+
+        {state.file && (
+          <div className="flex items-center justify-between p-4 bg-brand-50 border border-brand-200 rounded-xl">
+            <div className="flex items-center gap-3">
+              <FileSpreadsheet className="w-8 h-8 text-brand-500" />
+              <div>
+                <p className="text-sm font-medium text-brand-900">{state.file.name}</p>
+                <p className="text-xs text-brand-700">File attached for bulk import ({(state.file.size / 1024).toFixed(1)} KB)</p>
+              </div>
+            </div>
+            <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => onChange({ ...state, file: null })}>
+              <X className="w-4 h-4" />
+            </Button>
+          </div>
+        )}
+
+        {state.items.length === 0 && !state.file ? (
+          <div className="text-center py-6 border-2 border-dashed border-neutral-200 rounded-xl bg-neutral-50">
+            <Users className="w-8 h-8 text-neutral-300 mx-auto mb-2" />
+            <p className="text-sm text-neutral-500">No initial leads added.</p>
+            <div className="mt-4 flex justify-center gap-4">
+              <Button variant="outline" size="sm" onClick={addLead}><Plus className="w-4 h-4 mr-1" /> Add Manually</Button>
+              <div>
+                <input type="file" accept=".csv, .xlsx, .xls" className="hidden" id="leads-file-upload" onChange={handleFileChange} />
+                <Label htmlFor="leads-file-upload" className="cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 h-9 px-3">
+                  <UploadCloud className="w-4 h-4" /> Upload CSV/Excel
+                </Label>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {state.items.map((lead, idx) => (
+              <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-neutral-50 p-4 rounded-xl border border-neutral-200">
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-xs font-semibold text-neutral-500">First Name</label>
+                  <input type="text" value={lead.firstName} onChange={e => updateLead(idx, "firstName", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
+                </div>
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-xs font-semibold text-neutral-500">Last Name</label>
+                  <input type="text" value={lead.lastName} onChange={e => updateLead(idx, "lastName", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
+                </div>
+                <div className="sm:col-span-3 space-y-1">
+                  <label className="text-xs font-semibold text-neutral-500">Phone</label>
+                  <input type="text" value={lead.mobile} onChange={e => updateLead(idx, "mobile", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
+                </div>
+                <div className="sm:col-span-2 space-y-1">
+                  <label className="text-xs font-semibold text-neutral-500">Type</label>
+                  <select value={lead.leadType} onChange={e => updateLead(idx, "leadType", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm bg-white">
+                    <option value="BUYER">Buyer</option>
+                    <option value="SELLER">Seller</option>
+                  </select>
+                </div>
+                <div className="sm:col-span-1 flex justify-end pb-0.5">
+                  <Button variant="ghost" size="icon" onClick={() => removeLead(idx)} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8">
+                    <X className="w-4 h-4" />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
 
-      {state.file && (
-        <div className="flex items-center justify-between p-4 bg-brand-50 border border-brand-200 rounded-xl">
-          <div className="flex items-center gap-3">
-            <FileSpreadsheet className="w-8 h-8 text-brand-500" />
-            <div>
-              <p className="text-sm font-medium text-brand-900">{state.file.name}</p>
-              <p className="text-xs text-brand-700">File attached for bulk import ({(state.file.size / 1024).toFixed(1)} KB)</p>
-            </div>
-          </div>
-          <Button variant="ghost" size="sm" className="text-red-500 hover:text-red-700 hover:bg-red-50" onClick={() => onChange({ ...state, file: null })}>
-            <X className="w-4 h-4" />
-          </Button>
-        </div>
-      )}
+      <hr className="border-neutral-100" />
 
-      {state.items.length === 0 && !state.file ? (
-        <div className="text-center py-10 border-2 border-dashed border-neutral-200 rounded-xl bg-neutral-50">
-          <Users className="w-10 h-10 text-neutral-300 mx-auto mb-3" />
-          <p className="text-sm font-medium text-neutral-600">No initial leads added.</p>
-          <p className="text-xs text-neutral-400 mt-1">You can add leads later manually or via CSV import.</p>
-
-          <div className="mt-6 flex justify-center gap-4">
-            <Button variant="outline" size="sm" onClick={addLead}><Plus className="w-4 h-4 mr-1" /> Add Manually</Button>
-            <div>
-              <input type="file" accept=".csv, .xlsx, .xls" className="hidden" id="leads-file-upload" onChange={handleFileChange} />
-              <Label htmlFor="leads-file-upload" className="cursor-pointer inline-flex items-center justify-center gap-2 whitespace-nowrap rounded-md text-sm font-medium transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-500 disabled:pointer-events-none disabled:opacity-50 border border-neutral-300 bg-white hover:bg-neutral-50 text-neutral-700 h-9 px-3">
-                <UploadCloud className="w-4 h-4" /> Upload CSV/Excel
-              </Label>
-            </div>
+      {/* Auto-Sync Integrations Section */}
+      <div className="space-y-4">
+        <p className="text-sm font-medium text-neutral-900">2. Auto-Sync Integration (Optional)</p>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <label className="text-sm font-medium text-neutral-700">Integration Type</label>
+            <select
+              value={state.integrationType}
+              onChange={e => onChange({ ...state, integrationType: e.target.value })}
+              className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all bg-white"
+            >
+              <option value="NONE">None</option>
+              <option value="GOOGLE_SHEETS">Google Sheets</option>
+              <option value="GOOGLE_FORMS">Google Forms</option>
+              <option value="GOOGLE_DRIVE">Google Drive</option>
+            </select>
           </div>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          {state.items.map((lead, idx) => (
-            <div key={idx} className="grid grid-cols-1 sm:grid-cols-12 gap-3 items-end bg-neutral-50 p-4 rounded-xl border border-neutral-200">
-              <div className="sm:col-span-3 space-y-1">
-                <label className="text-xs font-semibold text-neutral-500">First Name</label>
-                <input type="text" value={lead.firstName} onChange={e => updateLead(idx, "firstName", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
+          
+          {state.integrationType === "GOOGLE_DRIVE" ? (
+            <div className="space-y-4 col-span-1 md:col-span-2">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-neutral-700">Google Drive Folder</label>
+                {loadingFolders ? (
+                  <div className="text-sm text-neutral-500 py-2">Loading folders...</div>
+                ) : (
+                  <div className="space-y-2">
+                    <input
+                      type="text"
+                      placeholder="Search folders..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 outline-none transition-all text-sm"
+                    />
+                    <select
+                      value={state.integrationFolderId}
+                      onChange={e => onChange({ ...state, integrationFolderId: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all bg-white"
+                      size={4}
+                    >
+                      <option value="">Select a folder</option>
+                      {filteredFolders.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  </div>
+                )}
               </div>
-              <div className="sm:col-span-3 space-y-1">
-                <label className="text-xs font-semibold text-neutral-500">Last Name</label>
-                <input type="text" value={lead.lastName} onChange={e => updateLead(idx, "lastName", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
-              </div>
-              <div className="sm:col-span-3 space-y-1">
-                <label className="text-xs font-semibold text-neutral-500">Phone</label>
-                <input type="text" value={lead.mobile} onChange={e => updateLead(idx, "mobile", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm" />
-              </div>
-              <div className="sm:col-span-2 space-y-1">
-                <label className="text-xs font-semibold text-neutral-500">Type</label>
-                <select value={lead.leadType} onChange={e => updateLead(idx, "leadType", e.target.value)} className="w-full px-3 py-1.5 rounded border border-neutral-300 text-sm bg-white">
-                  <option value="BUYER">Buyer</option>
-                  <option value="SELLER">Seller</option>
-                </select>
-              </div>
-              <div className="sm:col-span-1 flex justify-end pb-0.5">
-                <Button variant="ghost" size="icon" onClick={() => removeLead(idx)} className="text-red-500 hover:text-red-700 hover:bg-red-50 h-8 w-8">
-                  <X className="w-4 h-4" />
-                </Button>
-              </div>
+
+              {state.integrationFolderId && (
+                <div className="space-y-2 animate-in fade-in duration-300">
+                  <label className="text-sm font-medium text-neutral-700">Select File to Import (Optional)</label>
+                  {loadingFiles ? (
+                    <div className="text-sm text-neutral-500 py-2">Loading files...</div>
+                  ) : files.length > 0 ? (
+                    <select
+                      value={state.integrationFileId}
+                      onChange={e => onChange({ ...state, integrationFileId: e.target.value })}
+                      className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all bg-white"
+                    >
+                      <option value="">Select an Excel/CSV file</option>
+                      {files.map(f => <option key={f.id} value={f.id}>{f.name}</option>)}
+                    </select>
+                  ) : (
+                    <div className="text-sm text-neutral-500 py-2">No spreadsheets or CSV files found in this folder.</div>
+                  )}
+                </div>
+              )}
             </div>
-          ))}
+          ) : state.integrationType !== "NONE" && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-neutral-700">
+                {state.integrationType === "GOOGLE_SHEETS" ? "Google Sheets URL" : "Google Forms URL"}
+              </label>
+              <input
+                type="text"
+                value={state.integrationUrl}
+                onChange={e => onChange({ ...state, integrationUrl: e.target.value })}
+                placeholder="https://docs.google.com/..."
+                className="w-full px-4 py-2 rounded-lg border border-neutral-300 focus:ring-2 focus:ring-brand-500 focus:border-brand-500 outline-none transition-all"
+              />
+            </div>
+          )}
         </div>
-      )}
+
+        {state.integrationType !== "NONE" && (
+            <div className="bg-brand-50 text-brand-800 p-4 rounded-xl border border-brand-100 text-sm mt-4 col-span-1 md:col-span-2">
+              {state.integrationType === "GOOGLE_DRIVE" && state.integrationFileId ? (
+                <p><strong>Note:</strong> We will automatically parse and import leads from the selected file. Ensure your file has standard column headers (First Name, Last Name, Email, Mobile).</p>
+              ) : (
+                <p><strong>Note:</strong> We will link this configuration to your new campaign. 
+                Once the setup wizard is complete, you will still need to visit the <strong>Integrations</strong> page from the sidebar to map fields or initiate the actual sync!</p>
+              )}
+            </div>
+        )}
+      </div>
     </div>
   );
 }
