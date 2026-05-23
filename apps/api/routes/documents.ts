@@ -69,16 +69,21 @@ router.get("/", authenticate, async (req: Request, res: Response) => {
       // Now run the actual query
       documents = await prisma.managedDocument.findMany({
         where: {
-          type: "SHARED",
           OR: [
             {
+              // User's own documents (both PERSONAL and SHARED)
+              uploadedById: userId,
+            },
+            {
               // Documents directly shared with user
+              type: "SHARED",
               sharedWithUsers: {
                 some: { id: userId },
               },
             },
             {
               // Documents in folders shared with user
+              type: "SHARED",
               folder: {
                 type: "SHARED",
                 sharedWithUsers: {
@@ -144,8 +149,8 @@ router.get("/:id", authenticate, async (req: Request, res: Response) => {
     }
 
     // Check access permissions
-    if (role !== "ADMIN") {
-      // Only SHARED documents accessible to non-admins
+    if (role !== "ADMIN" && document.uploadedById !== userId) {
+      // Only SHARED documents accessible to non-admins if they didn't upload it
       if (document.type === "PERSONAL") {
         res.status(403).json({ error: "Access denied" });
         return;
@@ -203,7 +208,7 @@ router.get("/:id/view", authenticate, async (req: Request, res: Response) => {
     }
 
     // Check access permissions
-    if (role !== "ADMIN") {
+    if (role !== "ADMIN" && document.uploadedById !== userId) {
       if (document.type === "PERSONAL") {
         res.status(403).json({ error: "Access denied" });
         return;

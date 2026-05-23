@@ -24,7 +24,9 @@ export default function LeadListPage() {
     "not-connected": "Not Connected",
   };
 
-  const title = titleMap[filter as string] || "Leads";
+  const isDynamicStage = (filter as string).startsWith("stage-");
+  const stageId = isDynamicStage ? (filter as string).replace("stage-", "") : null;
+  const title = titleMap[filter as string] || (leads.length > 0 ? leads[0].currentStage.name : "Leads");
 
   useEffect(() => {
     async function loadLeads() {
@@ -33,12 +35,23 @@ export default function LeadListPage() {
         const data = await leadsApi.list();
         
         let filtered = data;
-        if (filter === "uncontacted") {
-           filtered = data.filter(l => l.currentStage.name.toLowerCase() === "new" || l.currentStage.name.toLowerCase() === "uncontacted");
+        if (isDynamicStage && stageId) {
+           filtered = data.filter(l => l.currentStage.id === stageId);
+        } else if (filter === "uncontacted") {
+           filtered = data.filter(l => 
+             ["new", "uncontacted", "leads"].includes(l.currentStage.name.toLowerCase()) || 
+             l.lastContactedAt === null
+           );
         } else if (filter === "in-progress") {
-           filtered = data.filter(l => !["new", "won", "lost", "archived", "uncontacted"].includes(l.currentStage.name.toLowerCase()));
+           filtered = data.filter(l => 
+             !["new", "uncontacted", "leads", "won", "lost", "closed won", "closed lost", "archived"].includes(l.currentStage.name.toLowerCase())
+           );
         } else if (filter === "follow-up") {
            filtered = data.filter(l => l.nextFollowUpAt !== null);
+        } else if (filter === "not-connected") {
+           filtered = data.filter(l => 
+             ["not connected", "call not connected", "disconnected"].includes(l.currentStage.name.toLowerCase())
+           );
         }
         setLeads(filtered);
       } catch (error) {

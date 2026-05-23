@@ -16,6 +16,37 @@ export default function LeadDetailsPage() {
   const [infoTab, setInfoTab] = useState<"ABOUT" | "TIMELINE">("ABOUT");
   const [isLoading, setIsLoading] = useState(true);
 
+  // Swipe gesture state
+  const [touchStart, setTouchStart] = useState<number | null>(null);
+  const [touchEnd, setTouchEnd] = useState<number | null>(null);
+  const minSwipeDistance = 50;
+
+  const onTouchStart = (e: React.TouchEvent) => {
+    setTouchEnd(null);
+    setTouchStart(e.targetTouches[0].clientX);
+  };
+
+  const onTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd(e.targetTouches[0].clientX);
+  };
+
+  const onTouchEnd = () => {
+    if (!touchStart || !touchEnd) return;
+    
+    const distance = touchStart - touchEnd;
+    const isLeftSwipe = distance > minSwipeDistance;
+    const isRightSwipe = distance < -minSwipeDistance;
+
+    const TABS = ["LEAD_INFO", "DISPOSE_LEAD", "OTHER"] as const;
+    const currentIndex = TABS.indexOf(activeTab);
+    
+    if (isLeftSwipe && currentIndex < TABS.length - 1) {
+      setActiveTab(TABS[currentIndex + 1]);
+    } else if (isRightSwipe && currentIndex > 0) {
+      setActiveTab(TABS[currentIndex - 1]);
+    }
+  };
+
   // Dispose Lead state
   const [disposeState, setDisposeState] = useState({ date: "", time: "" });
   const [isConnected, setIsConnected] = useState<boolean | null>(null);
@@ -27,6 +58,7 @@ export default function LeadDetailsPage() {
   // Other tab state
   const [newStageId, setNewStageId] = useState<string>("");
   const [isUpdatingStage, setIsUpdatingStage] = useState(false);
+  const [previousAttachment, setPreviousAttachment] = useState<{name: string, url: string} | null>(null);
 
   useEffect(() => {
     if (lead?.budgetMax) {
@@ -34,62 +66,94 @@ export default function LeadDetailsPage() {
     }
   }, [lead?.budgetMax]);
 
-  const handleDisposeSubmit = async () => {
-    if (isConnected === null || !lead) {
-      toast.error("Please specify if the call was connected");
+  const handleCombinedSubmit = async () => {
+    if (!lead) return;
+
+    // Validation for Dispose Lead form
+    if (isConnected === null && (disposeRemark || selectedFile || (disposeState.date && disposeState.time) || dealAmount)) {
+      toast.error("Please specify if the call was connected in the Dispose Lead tab");
+      return;
+    }
+
+    if (isConnected === false && (!disposeState.date || !disposeState.time)) {
+      toast.error("Please select a next action (follow-up date and time) since the call was not connected");
+      return;
+    }
+
+    // Ensure at least one action is being taken
+    if (isConnected === null && (!newStageId || newStageId === lead.currentStage.id)) {
+      toast.error("Please select a new pipeline stage or fill out the dispose lead form");
       return;
     }
 
     setIsDisposing(true);
+    setIsUpdatingStage(true);
+
     try {
-      let finalRemark = disposeRemark || (isConnected ? "Call connected successfully." : "Call was not connected.");
-      
-      // Upload file if selected
-      if (selectedFile) {
-        toast.info("Uploading attachment...");
-        const doc = await documentsApi.upload({
-          file: selectedFile,
-          type: "SHARED"
-        });
+      // 1. Dispose Logic
+      if (isConnected !== null) {
+        let finalRemark = disposeRemark || (isConnected ? "Call connected successfully." : "Call was not connected.");
         
-        try {
-          // Attempt to get the presigned URL for direct viewing
-          const viewData = await documentsApi.getViewUrl(doc.id);
-          finalRemark += `\n\n[Attachment: ${doc.name}](${viewData.url})`;
-        } catch (err) {
-          // Fallback if view url fails
-          finalRemark += `\n\n[Attachment: ${doc.name}] (Document ID: ${doc.id})`;
+        // Upload file if selected
+        if (selectedFile) {
+          toast.info("Uploading attachment...");
+          const doc = await documentsApi.upload({
+            file: selectedFile,
+            type: "SHARED"
+          });
+          
+          try {
+            const viewData = await documentsApi.getViewUrl(doc.id);
+            finalRemark += `\n\n[Attachment: ${doc.name}](${viewData.url})`;
+          } catch (err) {
+            finalRemark += `\n\n[Attachment: ${doc.name}] (Document ID: ${doc.id})`;
+          }
+        }
+
+        await interactionsApi.create({
+          leadId: lead.id,
+          type: "CALL",
+          subject: isConnected ? "Call - Connected" : "Call - Unconnected",
+          content: finalRemark,
+          direction: "OUTBOUND",
+          duration: isConnected ? 1 : 0,
+          occurredAt: new Date().toISOString(),
+        });
+
+        const updates: any = {};
+        
+        // If we explicitly set a follow up date/time
+        if (disposeState.date && disposeState.time) {
+          updates.nextFollowUpAt = new Date(`${disposeState.date}T${disposeState.time}`).toISOString();
+        } else if (newStageId && newStageId !== lead.currentStage.id) {
+          // If we didn't set a follow up date/time, BUT we changed the stage, clear the existing follow up
+          updates.nextFollowUpAt = null;
+        }
+        
+        if (dealAmount && !isNaN(parseFloat(dealAmount)) && parseFloat(dealAmount) !== lead.budgetMax) {
+          updates.budgetMax = parseFloat(dealAmount);
+        }
+
+        if (Object.keys(updates).length > 0) {
+          await leadsApi.update(lead.id, updates);
+        }
+      } else {
+        // If we ONLY changed the stage without doing dispose
+        if (newStageId && newStageId !== lead.currentStage.id) {
+          await leadsApi.update(lead.id, { nextFollowUpAt: null });
         }
       }
 
-      await interactionsApi.create({
-        leadId: lead.id,
-        type: "CALL",
-        subject: isConnected ? "Call - Connected" : "Call - Unconnected",
-        content: finalRemark,
-        direction: "OUTBOUND",
-        duration: isConnected ? 1 : 0,
-        occurredAt: new Date().toISOString(),
-      });
-
-      const updates: any = {};
-      if (disposeState.date && disposeState.time) {
-        updates.nextFollowUpAt = new Date(`${disposeState.date}T${disposeState.time}`).toISOString();
-      }
-      
-      if (dealAmount && !isNaN(parseFloat(dealAmount)) && parseFloat(dealAmount) !== lead.budgetMax) {
-        updates.budgetMax = parseFloat(dealAmount);
-      }
-
-      if (Object.keys(updates).length > 0) {
-        await leadsApi.update(lead.id, updates);
+      // 2. Stage Update Logic
+      if (newStageId && newStageId !== lead.currentStage.id) {
+        await leadsApi.updateStage(lead.id, newStageId);
       }
 
       // Re-fetch lead to get latest state from background workflow engine
       const refreshedLead = await leadsApi.get(lead.id);
       setLead(refreshedLead);
 
-      toast.success("Lead disposed successfully");
+      toast.success("Lead updated successfully!");
       setDisposeRemark("");
       setSelectedFile(null);
       setIsConnected(null);
@@ -97,24 +161,9 @@ export default function LeadDetailsPage() {
       setActiveTab("LEAD_INFO");
     } catch (error) {
       console.error(error);
-      toast.error("Failed to dispose lead");
+      toast.error("Failed to update lead");
     } finally {
       setIsDisposing(false);
-    }
-  };
-
-  const handleUpdateStage = async () => {
-    if (!newStageId || !lead || newStageId === lead.currentStage.id) return;
-    
-    setIsUpdatingStage(true);
-    try {
-      const updatedLead = await leadsApi.updateStage(lead.id, newStageId);
-      setLead(updatedLead);
-      toast.success("Pipeline stage updated successfully!");
-      setActiveTab("LEAD_INFO");
-    } catch (error) {
-      toast.error("Failed to update pipeline stage");
-    } finally {
       setIsUpdatingStage(false);
     }
   };
@@ -146,6 +195,51 @@ export default function LeadDetailsPage() {
       try {
         const data = await leadsApi.get(id as string);
         setLead(data);
+
+        // Prepopulate Dispose Lead state from latest CALL interaction
+        if (data.budgetMax) {
+          setDealAmount(data.budgetMax.toString());
+        }
+
+        if (data.nextFollowUpAt) {
+          const dateObj = new Date(data.nextFollowUpAt);
+          const yyyy = dateObj.getFullYear();
+          const mm = String(dateObj.getMonth() + 1).padStart(2, '0');
+          const dd = String(dateObj.getDate()).padStart(2, '0');
+          const hh = String(dateObj.getHours()).padStart(2, '0');
+          const min = String(dateObj.getMinutes()).padStart(2, '0');
+          setDisposeState({
+            date: `${yyyy}-${mm}-${dd}`,
+            time: `${hh}:${min}`
+          });
+        }
+
+        const latestCall = data.interactions?.find((i: any) => i.type === "CALL");
+        if (latestCall) {
+          let remark = latestCall.content || "";
+          
+          // Check if there is an attachment in the remark
+          const attachmentMatch = remark.match(/\n\n\[Attachment: (.*?)\]\((.*?)\)/);
+          if (attachmentMatch) {
+            remark = remark.replace(attachmentMatch[0], "");
+            setPreviousAttachment({ name: attachmentMatch[1], url: attachmentMatch[2] });
+          } else {
+            const fallbackMatch = remark.match(/\n\n\[Attachment: (.*?)\] \(Document ID: (.*?)\)/);
+            if (fallbackMatch) {
+              remark = remark.replace(fallbackMatch[0], "");
+              setPreviousAttachment({ name: fallbackMatch[1], url: "" });
+            }
+          }
+
+          // Clean default remarks
+          if (remark === "Call connected successfully." || remark === "Call was not connected.") {
+            remark = "";
+          }
+
+          setDisposeRemark(remark);
+          setIsConnected(latestCall.subject === "Call - Connected");
+        }
+
       } catch (error) {
         toast.error("Failed to fetch lead details");
         router.back();
@@ -208,7 +302,12 @@ export default function LeadDetailsPage() {
       </div>
 
       {/* Tab Content Area */}
-      <div className="flex-1 overflow-y-auto pb-[100px]">
+      <div 
+        className="flex-1 overflow-y-auto pb-[100px]"
+        onTouchStart={onTouchStart}
+        onTouchMove={onTouchMove}
+        onTouchEnd={onTouchEnd}
+      >
         
         {activeTab === "LEAD_INFO" && (
           <div className="p-4 space-y-4">
@@ -489,14 +588,7 @@ export default function LeadDetailsPage() {
               </div>
             </div>
 
-            <div>
-              <p className="text-sm font-bold text-brand-900 mb-3">Options</p>
-              <div className="grid grid-cols-2 gap-3">
-                <button className="py-3 rounded-xl border border-brand-200 bg-white text-brand-700 font-medium text-sm">Re-assign</button>
-                <button className="py-3 rounded-xl border border-brand-200 bg-white text-brand-700 font-medium text-sm">Copy to campaign</button>
-                <button className="py-3 rounded-xl border border-brand-200 bg-white text-brand-700 font-medium text-sm col-span-2">Move to campaign</button>
-              </div>
-            </div>
+
 
             <div>
               <p className="text-sm font-bold text-brand-900 mb-3">Deal Amount</p>
@@ -536,13 +628,39 @@ export default function LeadDetailsPage() {
                     }}
                   />
                   {!selectedFile ? (
-                    <label 
-                      htmlFor="file-upload" 
-                      className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-dashed border-brand-300 bg-brand-50 text-brand-600 font-medium cursor-pointer hover:bg-brand-100 transition-colors"
-                    >
-                      <Paperclip className="h-4 w-4" />
-                      <span>Attach File (PDF, PNG, JPG)</span>
-                    </label>
+                    previousAttachment ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between p-3 rounded-xl border border-brand-200 bg-white">
+                          <div className="flex items-center gap-2 overflow-hidden">
+                            <Paperclip className="h-4 w-4 text-brand-500 flex-shrink-0" />
+                            <a href={previousAttachment.url || "#"} target="_blank" rel="noreferrer" className="text-sm font-medium text-brand-900 truncate hover:underline">
+                              {previousAttachment.name} (Previously attached)
+                            </a>
+                          </div>
+                          <button 
+                            onClick={() => setPreviousAttachment(null)}
+                            className="p-1 rounded-full hover:bg-red-50 text-brand-400 hover:text-red-500 transition-colors"
+                          >
+                            <X className="h-4 w-4" />
+                          </button>
+                        </div>
+                        <label 
+                          htmlFor="file-upload" 
+                          className="flex items-center justify-center gap-2 w-full py-2 rounded-xl border border-dashed border-brand-300 bg-brand-50 text-brand-600 font-medium cursor-pointer hover:bg-brand-100 transition-colors text-sm"
+                        >
+                          <Paperclip className="h-4 w-4" />
+                          <span>Attach New File</span>
+                        </label>
+                      </div>
+                    ) : (
+                      <label 
+                        htmlFor="file-upload" 
+                        className="flex items-center justify-center gap-2 w-full py-3 rounded-xl border border-dashed border-brand-300 bg-brand-50 text-brand-600 font-medium cursor-pointer hover:bg-brand-100 transition-colors"
+                      >
+                        <Paperclip className="h-4 w-4" />
+                        <span>Attach File (PDF, PNG, JPG)</span>
+                      </label>
+                    )
                   ) : (
                     <div className="flex items-center justify-between p-3 rounded-xl border border-brand-200 bg-white">
                       <div className="flex items-center gap-2 overflow-hidden">
@@ -560,14 +678,7 @@ export default function LeadDetailsPage() {
                 </div>
               </div>
             </div>
-            
-            <Button 
-              onClick={handleDisposeSubmit}
-              disabled={isDisposing || isConnected === null}
-              className="w-full h-14 rounded-xl bg-brand-800 hover:bg-brand-900 text-white shadow-md text-lg font-semibold disabled:opacity-50"
-            >
-              {isDisposing ? "Submitting..." : "Submit"}
-            </Button>
+
           </div>
         )}
 
@@ -602,11 +713,11 @@ export default function LeadDetailsPage() {
                 Go Back
               </Button>
               <Button 
-                onClick={handleUpdateStage}
-                disabled={!newStageId || newStageId === lead.currentStage.id || isUpdatingStage}
+                onClick={handleCombinedSubmit}
+                disabled={isDisposing || isUpdatingStage}
                 className="flex-1 h-14 rounded-xl bg-brand-800 text-white shadow-md font-semibold disabled:opacity-50"
               >
-                {isUpdatingStage ? "Updating..." : "Submit"}
+                {isDisposing || isUpdatingStage ? "Submitting..." : "Submit"}
               </Button>
              </div>
           </div>

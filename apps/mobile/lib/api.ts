@@ -838,7 +838,7 @@ export const leads = {
     priority: Priority;
     tags: string[];
     assignedToId: string;
-    nextFollowUpAt: string;
+    nextFollowUpAt: string | null;
   }>) =>
     request<Lead>(`/leads/${id}`, {
       method: "PUT",
@@ -1416,6 +1416,14 @@ export const integrations = {
 };
 
 // ================================
+// PIPELINES API
+// ================================
+
+export const pipelinesApi = {
+  list: () => request<Pipeline[]>("/pipelines"),
+};
+
+// ================================
 // WORKFLOWS API
 // ================================
 
@@ -1451,6 +1459,24 @@ export const workflowsApi = {
   delete: (id: string) =>
     request<{ message: string }>(`/workflows/${id}`, {
       method: "DELETE",
+    }),
+};
+
+// ================================
+// NOTIFICATIONS API
+// ================================
+
+export const notificationsApi = {
+  getPublicKey: () => request<{ publicKey: string }>("/notifications/public-key"),
+  subscribe: (subscription: PushSubscriptionJSON) =>
+    request<{ message: string }>("/notifications/subscribe", {
+      method: "POST",
+      body: subscription,
+    }),
+  unsubscribe: (endpoint: string) =>
+    request<{ message: string }>("/notifications/unsubscribe", {
+      method: "POST",
+      body: { endpoint },
     }),
 };
 

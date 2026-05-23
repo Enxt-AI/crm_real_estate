@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Bell, BellOff } from "lucide-react";
 import { toast } from "sonner";
 import { useAuth } from "@/lib/auth-context";
+import { notificationsApi } from "@/lib/api";
 
 // Utility to convert VAPID key to Uint8Array
 function urlBase64ToUint8Array(base64String: string) {
@@ -69,15 +70,7 @@ export function PushNotificationToggle() {
           await subscription.unsubscribe();
           
           // Inform backend
-          const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-          await fetch(`${apiUrl}/notifications/unsubscribe`, {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-              Authorization: `Bearer ${localStorage.getItem("token")}`,
-            },
-            body: JSON.stringify({ endpoint: subscription.endpoint }),
-          });
+          await notificationsApi.unsubscribe(subscription.endpoint);
         }
         setIsSubscribed(false);
         toast.success("Notifications disabled");
@@ -93,11 +86,7 @@ export function PushNotificationToggle() {
         const registration = await navigator.serviceWorker.ready;
         
         // Fetch public VAPID key from backend
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:3001";
-        const keyRes = await fetch(`${apiUrl}/notifications/public-key`, {
-          headers: { Authorization: `Bearer ${localStorage.getItem("token")}` }
-        });
-        const { publicKey } = await keyRes.json();
+        const { publicKey } = await notificationsApi.getPublicKey();
         
         if (!publicKey) {
           throw new Error("Failed to get public key from server");
@@ -110,16 +99,7 @@ export function PushNotificationToggle() {
         });
 
         // Send to backend
-        const subRes = await fetch(`${apiUrl}/notifications/subscribe`, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${localStorage.getItem("token")}`,
-          },
-          body: JSON.stringify(subscription.toJSON()),
-        });
-
-        if (!subRes.ok) throw new Error("Failed to save subscription");
+        await notificationsApi.subscribe(subscription.toJSON() as PushSubscriptionJSON);
 
         setIsSubscribed(true);
         toast.success("Notifications enabled!");
