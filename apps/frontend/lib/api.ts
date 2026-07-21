@@ -1,4 +1,8 @@
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001";
+const isServer = typeof window === "undefined";
+// For browser clients, use relative paths to trigger Next.js rewrites (proxies requests to backend).
+// This prevents Safari from blocking cookies due to cross-site/cross-port requests (ITP).
+const API_BASE_URL = isServer ? (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:3001") : "";
+
 
 type RequestOptions = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
